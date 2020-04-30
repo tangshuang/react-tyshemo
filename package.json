@@ -1,0 +1,37 @@
+{
+  "name": "react-tyshemo",
+  "version": "0.3.0",
+  "description": "A react state manager drived by tyshemo.",
+  "main": "index.js",
+  "scripts": {
+    "build": "babel src/index.js -o index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tangshuang/react-tyshemo.git"
+  },
+  "keywords": [
+    "react",
+    "state",
+    "management",
+    "tyshemo"
+  ],
+  "author": "tangshuang",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/tangshuang/react-tyshemo/issues"
+  },
+  "homepage": "https://github.com/tangshuang/react-tyshemo#readme",
+  "devDependencies": {
+    "@babel/cli": "^7.8.4",
+    "@babel/core": "^7.9.0",
+    "@babel/plugin-proposal-class-properties": "^7.8.3",
+    "@babel/preset-env": "^7.9.5",
+    "@babel/preset-react": "^7.9.4"
+  },
+  "dependencies": {
+    "react": "^16.13.1",
+    "ts-fns": "^6.1.0",
+    "tyshemo": "^5.5.2"
+  }
+}
