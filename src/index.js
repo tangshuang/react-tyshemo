@@ -95,17 +95,24 @@ export function use(def) {
       const methodKeys = Object.keys($methods)
       return [...stateKeys, ...methodKeys]
     },
-    getOwnPropertyDescriptor(target, key) {
+    getOwnPropertyDescriptor(_, key) {
       const methodKeys = Object.keys($methods)
       const isMethod = methodKeys.includes(key)
-      return { enumerable: true, configurable: !isMethod }
+      return {
+        enumerable: !isMethod,
+        configurable: true,
+      }
     },
   })
 
   $methods.dispatch = (key = '') => {
     const value = parse($data, key)
     const state = parse($state, key)
-    $store.dispatch(key, { value, next: state, prev: state }, true)
+    $store.dispatch(key, {
+      value,
+      next: state,
+      prev: state,
+    }, true)
   }
 
   each(methods, (fn, key) => {
