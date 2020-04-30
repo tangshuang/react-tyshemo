@@ -192,7 +192,7 @@ export function connect(mapToProps, mergeToProps) {
         this.init()
       }
       init() {
-        callHook('onInit', this)
+        callHook('onInit', TyshemoConnectedComponent)
       }
       update = () => {
         this.setState({})
@@ -202,14 +202,14 @@ export function connect(mapToProps, mergeToProps) {
           const store = _stores[key]
           store.watch('*', this.update, true)
         })
-        callHook('onMount', this)
+        callHook('onMount', TyshemoConnectedComponent)
       }
       componentWillUnmount() {
         keys.forEach((key) => {
           const store = _stores[key]
           store.unwatch('*', this.update)
         })
-        callHook('onUnmount', this)
+        callHook('onUnmount', TyshemoConnectedComponent)
       }
       render() {
         const { children, ...props } = this.props

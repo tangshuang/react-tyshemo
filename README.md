@@ -66,19 +66,19 @@ use({
     onConnect(names) {},
 
     // after connected Component created
-    onCreate(ConnectedComponent)
+    onCreate(TyshemoConnectedComponent)
 
-    // after ConnectedComponent initialized
-    onInit(componentInstance) {},
+    // after TyshemoConnectedComponent initialized
+    onInit(TyshemoConnectedComponent) {},
 
-    // when ConnectedComponent componentDidMount
-    onMount(componentInstance) {},
+    // when TyshemoConnectedComponent componentDidMount
+    onMount(TyshemoConnectedComponent) {},
 
-    // when ConnectedComponent componentWillUnmount
-    onUnmount(componentInstance) {},
+    // when TyshemoConnectedComponent componentWillUnmount
+    onUnmount(TyshemoConnectedComponent) {},
 
-    // when ConnectedComponent render
-    // @param Component is the real component to render which is wrapped in ConnectedComponent
+    // when TyshemoConnectedComponent render
+    // @param Component is the real component to render which is wrapped in TyshemoConnectedComponent
     // @param connectedProps is the merged props which pass into wrapped component
     onRender(Component, connectedProps) {},
   },
