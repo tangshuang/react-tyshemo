@@ -1,6 +1,6 @@
 import React from 'react'
 import { Store, Model } from 'tyshemo'
-import { each, filter, isInstanceOf, isFunction, parse, map, define } from 'ts-fns'
+import { each, filter, isInstanceOf, isFunction, parse, map } from 'ts-fns'
 
 const _stores = {}
 const _hooks = {}
@@ -95,20 +95,21 @@ export function use(def) {
       const methodKeys = Object.keys($methods)
       return [...stateKeys, ...methodKeys]
     },
-    getOwnPropertyDescriptor() {
-      return { enumerable: true }
+    getOwnPropertyDescriptor(target, key) {
+      const methodKeys = Object.keys($methods)
+      const isMethod = methodKeys.includes(key)
+      return { enumerable: true, configurable: !isMethod }
     },
   })
+
+  $methods.dispatch = (key = '') => {
+    const value = parse($data, key)
+    const state = parse($state, key)
+    $store.dispatch(key, { value, next: state, prev: state }, true)
+  }
+
   each(methods, (fn, key) => {
     $methods[key] = fn.bind($context)
-  })
-  // trigger render
-  define($methods, 'dispatch', {
-    value: (key = '') => {
-      const value = parse($data, key)
-      const state = parse($state, key)
-      $store.dispatch(key, { value, next: state, prev: state }, true)
-    },
   })
 
   // hooks
