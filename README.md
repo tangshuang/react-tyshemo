@@ -92,27 +92,26 @@ One `def` (same space name) can be only `use` once.
 
 ```js
 function MyComponent(props) {
-  const { statename, growAge } = props
+  const { name, age, growAge } = props
 
   return (
     <>
-      <span>Age: {statename.age}</span>
-      <span>Height: {statename.height}</span>
+      <span>Age: {age}</span>
+      <span>Height: {height}</span>
       <span onClick={growAge}>Grow</span>
-      <span onClick={() => statename.age ++}>Grow</span>
     </>
   )
 }
 
 /**
- * @param {object} state the whole state in react-tyshemo, one application will own only one state, all data are here
- * @param {object} methods the set of methods for all state space
+ * @param {object} contexts the whole state spaces, each context owns a space state and methods
  */
-const mapToProps = (state, methods) => {
-  const { statename } = state
-  const { growAge } = methods.statename
+const mapToProps = (contexts) => {
+  const { statename } = contexts
+  const { name, age, growAge } = statename
   return {
-    statename,
+    name,
+    age,
     growAge,
   }
 }
@@ -156,45 +155,86 @@ unsubscribe()
 ReactTyshemo does not like redux, state in store is mutable, you should always change the state to trigger UI rerender.
 
 ```js
-const mapToProps = (state, methods) => {
-  const { statename } = state
-  const { growAge } = methods.statename
+const mapToProps = (contexts) => {
+  const { statename } = contexts
   return {
-    ...statename,
-    growAge,
+    statename,
   }
-}
-
-function MyComponent(props) {
-  const { name, age } = props
-  // here you use state properties values, you do not have the ability to change state value,
-  // > const { growAge } = props
-  // > growAge()
-  // the only way is to invoke methods functions
-  // the best way is pass an object part of state, so that you can change the object's properties
-  // > const { somestate } = props
-  // > somestate.age ++
-  // ...
 }
 ```
 
-Sometimes, you change a normal instance of some Class, it is not able to dispatch changes.
-How to resolve it? We provide a method to rerender your UI:
+```js
+function MyComponent(props) {
+  const { statename } = props
+  const { name, age, growAge } = statename
+  // invoke `growAge()` to change state
+  // ...
+  return <span onClick={() => growAge()}>{statename.age}</span>
+}
+```
+
+Here you use state properties values, you do not have the ability to change state value, you should must invoke a method to trigger change.
+The best practive is to pass an object part of state, so that you can change the object's properties:
 
 ```js
 function MyComponent(props) {
-  const { updateRender } = props
+  const { statename } = props
+  // invoke `statename.age ++` to change state
+  // ...
 
-  class Some {}
+  return <span onClick={() => statename.age ++}>{statename.age}</span>
+}
+```
+
+Now, you do not need to write a `growAge` method.
+
+**If not reactive data**
+
+Sometimes, you change a normal instance of some Class, it is not able to dispatch changes. For example:
+
+```js
+class Some {}
+const some = new Some()
+
+somestate.some = some
+
+some.a = 1 // this will not dispatch changes into store
+```
+
+How to resolve it? We provide a specail method `dispatch`:
+
+```js
+use({
+  name: 'namespace',
+  state: {
+    some: null,
+  },
+  method: {
+    updateSome(data) {
+      if (data instanceof Some) {
+        this.some = data
+      }
+      else if (this.some) {
+        Object.assign(this.some, data)
+      }
+      else {
+        this.some = data
+      }
+
+      // here, you should use `dispatch` to notify state change
+      this.dispatch('some')
+    },
+  },
+})
+```
+
+Then in component:
+
+```js
+function MyComponent(props) {
+  const { namespace } = props
   const some = new Some()
-
-  const { somestate } = props
-  somestate.some = some
-
-  some.a = 1 // this will not dispatch changes into store
-
-  updateRender() // update
-  // updateRender(true) // force update
+  namespace.updateSome(some)
 }
 ```
 

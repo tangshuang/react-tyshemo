@@ -1,9 +1,8 @@
 import React from 'react'
 import { Store, Model } from 'tyshemo'
-import { each, filter, isInstanceOf, isFunction, clone, map } from 'ts-fns'
+import { each, filter, isInstanceOf, isFunction, parse, map, define } from 'ts-fns'
 
 const _stores = {}
-const _methods = {}
 const _hooks = {}
 const _contexts = {}
 
@@ -55,6 +54,7 @@ export function use(def) {
 
   const $store = new Store(state)
   const $state = $store.state
+  const $data = $store.data
 
   // computed
   each(computed, (compute, key) => {
@@ -64,15 +64,15 @@ export function use(def) {
   // methods
   const $methods = {}
   const $context = new Proxy({}, {
-    get: (target, key) => {
-      if ($state[key]) {
-        return $state[key]
-      }
-      else if ($methods[key]) {
+    get(_, key) {
+      if ($methods[key]) {
         return $methods[key]
       }
+      else {
+        return $state[key]
+      }
     },
-    set: (target, key, value) => {
+    set(_, key, value) {
       if ($methods[key]) {
         return false
       }
@@ -81,7 +81,7 @@ export function use(def) {
         return true
       }
     },
-    deleteProperty(target, key) {
+    deleteProperty(_, key) {
       if (key in $state) {
         delete $state[key]
         return true
@@ -90,9 +90,25 @@ export function use(def) {
         return false
       }
     },
+    ownKeys() {
+      const stateKeys = Object.keys($state)
+      const methodKeys = Object.keys($methods)
+      return [...stateKeys, ...methodKeys]
+    },
+    getOwnPropertyDescriptor() {
+      return { enumerable: true }
+    },
   })
   each(methods, (fn, key) => {
     $methods[key] = fn.bind($context)
+  })
+  // trigger render
+  define($methods, 'dispatch', {
+    value: (key = '') => {
+      const value = parse($data, key)
+      const state = parse($state, key)
+      $store.dispatch(key, { value, next: state, prev: state }, true)
+    },
   })
 
   // hooks
@@ -103,7 +119,6 @@ export function use(def) {
 
   // register
   _stores[name] = $store
-  _methods[name] = $methods
   _hooks[name] = $hooks
   _contexts[name] = $context
 
@@ -148,31 +163,23 @@ export function use(def) {
  * })(MyComponent)
  */
 export function connect(mapToProps, mergeToProps) {
-  const keys = []
-  const states = new Proxy(_stores, {
-    get(t, key) {
-      keys.push(key)
-      return _stores[key].state
-    },
-    set: () => false,
-    deleteProperty: () => false,
-  })
-  const methods = new Proxy(_methods, {
-    get(t, key) {
-      keys.push(key)
-      return _methods[key]
+  const names = []
+  const contexts = new Proxy(_contexts, {
+    get(_, name) {
+      names.push(name)
+      return _contexts[name]
     },
     set: () => false,
     deleteProperty: () => false,
   })
 
-  const mappedProps = mapToProps(states, methods)
+  const mappedProps = mapToProps(contexts)
   const mergeProps = (ownProps) => {
     const mergedProps = isFunction(mergeToProps) ? mergeToProps(mappedProps, ownProps) : { ...mappedProps, ...ownProps }
     return mergedProps
   }
 
-  const hooks = filter(_hooks, (_, key) => keys.includes(key))
+  const hooks = filter(_hooks, (_, name) => names.includes(name))
   const callHook = (fn, ...args) => {
     each(hooks, (hook, name) => {
       if (hook[fn]) {
@@ -182,7 +189,7 @@ export function connect(mapToProps, mergeToProps) {
     })
   }
 
-  callHook('onConnect', keys)
+  callHook('onConnect', names)
 
   return function(Component) {
     class TyshemoConnectedComponent extends React.Component {
@@ -198,15 +205,15 @@ export function connect(mapToProps, mergeToProps) {
         this.setState({})
       }
       componentDidMount() {
-        keys.forEach((key) => {
-          const store = _stores[key]
+        names.forEach((name) => {
+          const store = _stores[name]
           store.watch('*', this.update, true)
         })
         callHook('onMount', TyshemoConnectedComponent)
       }
       componentWillUnmount() {
-        keys.forEach((key) => {
-          const store = _stores[key]
+        names.forEach((name) => {
+          const store = _stores[name]
           store.unwatch('*', this.update)
         })
         callHook('onUnmount', TyshemoConnectedComponent)
@@ -214,19 +221,6 @@ export function connect(mapToProps, mergeToProps) {
       render() {
         const { children, ...props } = this.props
         const connectedProps = mergeProps(props)
-
-        // user can force update rendering
-        connectedProps.updateRender = (fn, force) => {
-          if (isFunction(fn)) {
-            fn()
-          }
-          if (force) {
-            this.forceUpdate()
-          }
-          else {
-            this.update()
-          }
-        }
 
         callHook('onRender', Component, connectedProps)
 
@@ -261,9 +255,8 @@ export function connect(mapToProps, mergeToProps) {
 export function make(def) {
   const { name } = def
   use(def)
-  return connect((state, methods) => ({
-    [name]: state[name],
-    ...methods[name],
+  return connect((contexts) => ({
+    [name]: contexts[name],
   }))
 }
 
