@@ -174,7 +174,7 @@ function MyComponent(props) {
 ```
 
 Here you use state properties values, you do not have the ability to change state value, you should must invoke a method to trigger change.
-The best practive is to pass an object part of state, so that you can change the object's properties:
+However, tyshemo store state is a reactive object, so that you can change the object's properties directly:
 
 ```js
 function MyComponent(props) {
@@ -187,6 +187,7 @@ function MyComponent(props) {
 ```
 
 Now, you do not need to write a `growAge` method.
+However, the best practice is create methods and change state in methods and invoke methods in components, so that you know where the state change.
 
 **If not reactive data**
 
@@ -198,7 +199,7 @@ const some = new Some()
 
 somestate.some = some
 
-some.a = 1 // this will not dispatch changes into store
+some.a = 1 // this will not dispatch changes, because some is not reactive
 ```
 
 How to resolve it? We provide a specail method `dispatch`:
@@ -221,7 +222,10 @@ use({
         this.some = data
       }
 
-      // here, you should use `dispatch` to notify state change
+      // here, you should use `dispatch`
+      // it receive the keyPath to notify store to trigger changes,
+      // or you can pass empty to dispatch like: this.dispatch() to notify the whole state change
+      // the change will cause rerender
       this.dispatch('some')
     },
   },
