@@ -11,7 +11,7 @@ npm i react-tyshemo
 ## API
 
 ```js
-import { use, connect, make, store } from 'react-tyshemo'
+import { use, connect } from 'react-tyshemo'
 ```
 
 ### use(def)
@@ -20,6 +20,7 @@ To create a state space.
 
 ```js
 use({
+  // should be unique, will be used only the first time
   name: 'statename',
 
   // default state
