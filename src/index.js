@@ -1,6 +1,6 @@
 import React from 'react'
 import { Store, Model } from 'tyshemo'
-import { each, filter, isInstanceOf, isFunction, parse, map } from 'ts-fns'
+import { each, filter, isInstanceOf, isFunction, parse, map, isString } from 'ts-fns'
 
 const _stores = {}
 const _hooks = {}
@@ -105,7 +105,14 @@ export function use(def) {
     },
   })
 
-  $methods.dispatch = (key = '') => {
+  $methods.dispatch = (key, fn) => {
+    fn = isFunction(key) ? key : fn
+    key = isString(key) ? key : ''
+
+    if (fn) {
+      fn()
+    }
+
     const value = parse($data, key)
     const state = parse($state, key)
     $store.dispatch(key, {
