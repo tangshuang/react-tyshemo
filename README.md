@@ -16,12 +16,12 @@ import { use, connect } from 'react-tyshemo'
 
 ### use(def)
 
-To create a state space.
+To create a namespace state.
 
 ```js
 use({
   // should be unique, will be used only the first time
-  name: 'statename',
+  name: 'namespace',
 
   // default state
   state: {
@@ -58,7 +58,7 @@ use({
   // hook functions to do in certain moment
   // you can call `this` in hook functions to point to state context
   hooks: {
-    // after def be registered
+    // after def be used
     // always, you do need to request some data by ajax to fill state in this hook
     onUse() {},
 
@@ -86,7 +86,7 @@ use({
 ```
 
 Use `use` in a global file, or in business components when you need.
-One `def` (same space name) can be only `use` once.
+One `def` (same namespace) can be `use` only once.
 
 ### connect(mapToProps: Function, mergeToProps?: Function): Function
 
@@ -104,11 +104,11 @@ function MyComponent(props) {
 }
 
 /**
- * @param {object} contexts the whole state spaces, each context owns a space state and methods
+ * @param {object} contexts the whole state, each context owns a state and methods of the namespace
  */
 const mapToProps = (contexts) => {
-  const { statename } = contexts
-  const { name, age, growAge } = statename
+  const { namespace } = contexts
+  const { name, age, growAge } = namespace
   return {
     name,
     age,
@@ -116,6 +116,9 @@ const mapToProps = (contexts) => {
   }
 }
 
+/**
+ * create final props to pass into component
+ */
 const mergeToProps = (mappedProps, ownProps) => {
   return {
     ...mappedProps,
@@ -152,37 +155,40 @@ unsubscribe()
 
 ## Mutable
 
-ReactTyshemo does not like redux, state in store is mutable, you should always change the state to trigger UI rerender.
+Tyshemo Store state in store is mutable, does not like Redux, you should always change the state to trigger UI rerender.
+
+*The best practice is create methods in state def, and invoke methods in components.*
 
 ```js
 const mapToProps = (contexts) => {
-  const { statename } = contexts
+  const { namespace } = contexts
   return {
-    statename,
+    namespace,
   }
 }
 ```
 
 ```js
 function MyComponent(props) {
-  const { statename } = props
-  const { name, age, growAge } = statename
+  const { namespace } = props
+  const { name, age, growAge } = namespace
   // invoke `growAge()` to change state
   // ...
-  return <span onClick={() => growAge()}>{statename.age}</span>
+  return <span onClick={() => growAge()}>{namespace.age}</span>
 }
 ```
 
 Here you use state properties values, you do not have the ability to change state value, you should must invoke a method to trigger change.
-However, tyshemo store state is a reactive object, so that you can change the object's properties directly:
+
+However, namespace state is a reactive object, so that you can change the object's properties directly:
 
 ```js
 function MyComponent(props) {
-  const { statename } = props
-  // invoke `statename.age ++` to change state
+  const { namespace } = props
+  // invoke `namespace.age ++` to change state
   // ...
 
-  return <span onClick={() => statename.age ++}>{statename.age}</span>
+  return <span onClick={() => namespace.age ++}>{namespace.age}</span>
 }
 ```
 
@@ -242,23 +248,25 @@ function MyComponent(props) {
 }
 ```
 
+*It is not recommanded to invoke `dispatch` in components directly.*
+
 ## Scoped Dependencies
 
-When you use `connect` to wrap a component, it is dependent on the state spaces which you called in `mapToProps` to rerender. For example:
+When you use `connect` to wrap a component, it is dependent on the state namespaces which you called in `mapToProps` to rerender. For example:
 
 ```js
-const mapToProps = (state, methods) => {
-  const { state1, state2 } = state
-  const methods3 = state.state3
+const mapToProps = (contexts) => {
+  const { state1, state2, state3 } = contexts
+  const { methods3 } = state3
   return {
     state1,
     state2,
-    ...methods3,
+    methods3,
   }
 }
 ```
 
-In the previous code, we only used `state1` `state2` `state3`, so only these state spaces changes, the component will rerender, other state spaces changes in other components will have no affects for this component.
+In the previous code, we only used `state1` `state2` `state3`, so only these state namespaces changes, the component will rerender, other state spaces changes in other components will have no affects on this component.
 
 ## Replay
 
