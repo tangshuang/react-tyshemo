@@ -74,6 +74,9 @@ use({
     // when TyshemoConnectedComponent componentDidMount
     onMount(TyshemoConnectedComponent) {},
 
+    // when TyshemoConnectedComponent componentDidUpdate
+    onUpdate(TyshemoConnectedComponent) {},
+
     // when TyshemoConnectedComponent componentWillUnmount
     onUnmount(TyshemoConnectedComponent) {},
 
@@ -297,3 +300,90 @@ Recorder.replay((item) => {
 ```
 
 However, you should notice that, if you want to send your recorded data to server side, instance of Class will bring up trouble. We do not resolve this, you should do it by your self.
+
+## Local state
+
+Use vue's state management, use react's UI render. If you want to taste replacing vue's template with react, do like this:
+
+```js
+import { makeLocal } from 'react-tyshemo'
+
+// vue's template
+class MyComponent extends React.Component {
+  render() {
+    const { name, age, height, updateAge } = this.props
+    return (
+      <span onClick={updateAge}>{name} {age} {height}</span>
+    )
+  }
+}
+
+// vue's script
+function define() {
+  return {
+    state: {
+      name: 'tomy',
+      age: 10,
+    },
+    computed: {
+      height() {
+        return this.age * 5
+      },
+    },
+    methods: {
+      updateAge() {
+        this.age ++
+      },
+    },
+    hooks: {
+      onInit() {
+        this.age = 11
+      },
+    },
+  }
+}
+
+export default makeLocal(define)(MyComponent)
+```
+
+**makeLocal(define: Function): Function**
+
+`makeLocal` is used to create a wrapper for local state injection. Some times, you do not need to register state to global, you just want to make it work for local component, then you should use `makeLocal`.
+
+It receive a `define` function which return the state `def`.
+
+Notice that, hooks are run not like `make`, because all things come after component initialized. So, the best practice is only use hooks from `onInit` to `onUmount`.
+
+The `name` of return `def` makes sense. When you give a `name` property, the state will patch to props with namespace, if not, the state will patch to props with properties.
+
+```js
+function define() {
+  return {
+    state: {
+      age: 0,
+    }
+  }
+}
+
+function MyComponent(props) {
+  const { age } = props
+}
+```
+
+```js
+function define() {
+  return {
+    name: 'somebody',
+    state: {
+      age: 10,
+    },
+  }
+}
+
+function MyComponent(props) {
+  const { somebody } = props
+  const { age } = somebody
+}
+```
+
+And `define` function receive `props` of the component, so that you can use the `props` to generate state.

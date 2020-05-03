@@ -6,51 +6,8 @@ const _stores = {}
 const _hooks = {}
 const _contexts = {}
 
-/**
- *
- * @param {object} def
- * @param {string} def.name the key of namespace in the whole state, for example, when name is 'some', you can get this local state by state.some or store.get('some')
- * @param {object} def.state the init state of this namespace
- * @param {object} def.computed computed properties
- * @param {object} def.methods the methods to call with context this
- * @param {object} def.hooks the functions to do when on certain moment
- * @param {object} def.watch the functions to react when state change
- * @example
- * import { use, connect } from 'tyshemo-react'
- *
- * use({
- *   name: 'myState',
- *   state: {
- *     some: 'xxx',
- *   },
- *   methods: {
- *     updateSome(v) {
- *       this.some = v
- *     },
- *   },
- * })
- *
- * function MyComponent(props) {
- *   const { myState, updateSome } = props
- *   return <span onClick={() => updateSome('aaa')}>{myState.some}</span>
- * }
- *
- * export default connect((state, methods) => {
- *   const { myState } = state
- *   const { updateSome } = methods.myState
- *   return {
- *     myState,
- *     updateSome,
- *   }
- * })(MyComponent)
- */
-export function use(def) {
-  const { name, state, computed = {}, methods = {}, hooks = {}, watch = {} } = def
-
-  // has been registered
-  if (_stores[name]) {
-    return false
-  }
+function create(def) {
+  const { state, computed = {}, methods = {}, hooks = {}, watch = {} } = def
 
   const $store = new Store(state)
   const $state = $store.state
@@ -132,11 +89,6 @@ export function use(def) {
     $hooks[key] = fn.bind($context)
   })
 
-  // register
-  _stores[name] = $store
-  _hooks[name] = $hooks
-  _contexts[name] = $context
-
   /**
    * propagation of models
    */
@@ -150,6 +102,70 @@ export function use(def) {
   each(watch, (fn, key) => {
     $store.watch(key, fn.bind($context), true)
   })
+
+  return {
+    store: $store,
+    hooks: $hooks,
+    context: $context,
+  }
+}
+
+/**
+ *
+ * @param {object} def
+ * @param {string} def.name the key of namespace in the whole state, for example, when name is 'some', you can get this local state by state.some or store.get('some')
+ * @param {object} def.state the init state of this namespace
+ * @param {object} def.computed computed properties
+ * @param {object} def.methods the methods to call with context this
+ * @param {object} def.hooks the functions to do when on certain moment
+ * @param {object} def.watch the functions to react when state change
+ * @example
+ * import { use, connect } from 'tyshemo-react'
+ *
+ * use({
+ *   name: 'myState',
+ *   state: {
+ *     some: 'xxx',
+ *   },
+ *   methods: {
+ *     updateSome(v) {
+ *       this.some = v
+ *     },
+ *   },
+ * })
+ *
+ * function MyComponent(props) {
+ *   const { myState, updateSome } = props
+ *   return <span onClick={() => updateSome('aaa')}>{myState.some}</span>
+ * }
+ *
+ * export default connect((state, methods) => {
+ *   const { myState } = state
+ *   const { updateSome } = methods.myState
+ *   return {
+ *     myState,
+ *     updateSome,
+ *   }
+ * })(MyComponent)
+ */
+export function use(def) {
+  const { name } = def
+
+  // has been registered
+  if (_stores[name]) {
+    return false
+  }
+
+  const {
+    store: $store,
+    hooks: $hooks,
+    context: $context,
+  } = create(def)
+
+  // register
+  _stores[name] = $store
+  _hooks[name] = $hooks
+  _contexts[name] = $context
 
   // onUse
   if ($hooks.onUse) {
@@ -204,7 +220,7 @@ export function connect(mapToProps, mergeToProps) {
     })
   }
 
-  callHook('onConnect', names)
+  callHook('onConnect')
 
   return function(Component) {
     class TyshemoConnectedComponent extends React.Component {
@@ -225,6 +241,9 @@ export function connect(mapToProps, mergeToProps) {
           store.watch('*', this.update, true)
         })
         callHook('onMount', TyshemoConnectedComponent)
+      }
+      componentDidUpdate() {
+        callHook('onUpdate', TyshemoConnectedComponent)
       }
       componentWillUnmount() {
         names.forEach((name) => {
@@ -273,6 +292,101 @@ export function make(def) {
   return connect((contexts) => ({
     [name]: contexts[name],
   }))
+}
+
+/**
+ *
+ * @param {*} getDef
+ * @example
+ * function MyComponent(props) {
+ *   const { age, updateAge } = props
+ *   // ...
+ * }
+ *
+ * const connect = makeLocal(() => {
+ *   return {
+ *     state: {
+ *       age: 10,
+ *     },
+ *     methods: {
+ *       updateAge() {
+ *         this.age ++
+ *       },
+ *     },
+ *   }
+ * })
+ *
+ * export default connect(MyComponent)
+ */
+export function makeLocal(getDef) {
+  const callHook = (context, hook, ...args) => {
+    if (isFunction(hook)) {
+      hook.apply(context, args)
+    }
+  }
+  return function(Component) {
+    class TyshemoConnectedComponent extends React.Component {
+      constructor(props) {
+        super(props)
+        this.state = {}
+        this.init()
+      }
+      init() {
+        const def = getDef(this.props)
+        const { name, store, hooks, context } = create(def)
+
+        this.$$ = {
+          name,
+          store,
+          hooks,
+          context,
+        }
+
+        callHook(context, hooks.onUse)
+        callHook(context, hooks.onConnect)
+
+        callHook(context, hooks.onCreate, TyshemoConnectedComponent)
+        callHook(context, hooks.onInit, TyshemoConnectedComponent)
+      }
+      update = () => {
+        this.setState({})
+      }
+      active = () => {}
+      componentDidMount() {
+        const { store, hooks, context } = this.$$
+        store.watch('*', this.update, true)
+        callHook(context, hooks.onMount, TyshemoConnectedComponent)
+      }
+      componentDidUpdate() {
+        const { hooks, context } = this.$$
+        callHook(context, hooks.onUpdate, TyshemoConnectedComponent)
+      }
+      componentWillUnmount() {
+        const { store, hooks, context } = this.$$
+        store.unwatch('*', this.update)
+        callHook(context, hooks.onUnmount, TyshemoConnectedComponent)
+        this.$$ = null
+      }
+      render() {
+        const { name, context, hooks } = this.$$
+        const { children, ...props } = this.props
+
+        const connectedProps = name ? {
+          [name]: context,
+          ...props,
+        } : {
+          ...context,
+          ...props,
+        }
+
+        callHook(context, hooks.onRender, Component, connectedProps)
+
+        return <Component {...connectedProps}>{children}</Component>
+      }
+    }
+
+    return TyshemoConnectedComponent
+  }
 }
 
 /**
