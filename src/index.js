@@ -5,6 +5,7 @@ import { each, filter, isInstanceOf, isFunction, parse, map, isString } from 'ts
 const _stores = {}
 const _hooks = {}
 const _contexts = {}
+const _shared = []
 
 function create(def) {
   const { state, computed = {}, methods = {}, hooks = {}, watch = {} } = def
@@ -169,7 +170,7 @@ export function use(def) {
 
   // onUse
   if ($hooks.onUse) {
-    $hooks.onUse.call($context)
+    $hooks.onUse()
   }
 
   return true
@@ -212,10 +213,9 @@ export function connect(mapToProps, mergeToProps) {
 
   const hooks = filter(_hooks, (_, name) => names.includes(name))
   const callHook = (fn, ...args) => {
-    each(hooks, (hook, name) => {
-      if (hook[fn]) {
-        const context = _contexts[name]
-        hook[fn].apply(context, args)
+    each(hooks, (hooks) => {
+      if (hooks[fn]) {
+        hooks[fn](...args)
       }
     })
   }
@@ -296,7 +296,7 @@ export function make(def) {
 
 /**
  *
- * @param {*} getDef
+ * @param {*} define
  * @example
  * function MyComponent(props) {
  *   const { age, updateAge } = props
@@ -318,10 +318,10 @@ export function make(def) {
  *
  * export default connect(MyComponent)
  */
-export function makeLocal(getDef) {
-  const callHook = (context, hook, ...args) => {
+export function makeLocal(define) {
+  const callHook = (hook, ...args) => {
     if (isFunction(hook)) {
-      hook.apply(context, args)
+      hook(args)
     }
   }
   return function(Component) {
@@ -332,7 +332,7 @@ export function makeLocal(getDef) {
         this.init()
       }
       init() {
-        const def = getDef(this.props)
+        const def = define()
         const { name, store, hooks, context } = create(def)
 
         this.$$ = {
@@ -342,29 +342,29 @@ export function makeLocal(getDef) {
           context,
         }
 
-        callHook(context, hooks.onUse)
-        callHook(context, hooks.onConnect)
+        callHook(hooks.onUse)
+        callHook(hooks.onConnect)
 
-        callHook(context, hooks.onCreate, TyshemoConnectedComponent)
-        callHook(context, hooks.onInit, TyshemoConnectedComponent)
+        callHook(hooks.onCreate, TyshemoConnectedComponent)
+        callHook(hooks.onInit, TyshemoConnectedComponent)
       }
       update = () => {
         this.setState({})
       }
       active = () => {}
       componentDidMount() {
-        const { store, hooks, context } = this.$$
+        const { store, hooks } = this.$$
         store.watch('*', this.update, true)
-        callHook(context, hooks.onMount, TyshemoConnectedComponent)
+        callHook(hooks.onMount, TyshemoConnectedComponent)
       }
       componentDidUpdate() {
-        const { hooks, context } = this.$$
-        callHook(context, hooks.onUpdate, TyshemoConnectedComponent)
+        const { hooks } = this.$$
+        callHook(hooks.onUpdate, TyshemoConnectedComponent)
       }
       componentWillUnmount() {
-        const { store, hooks, context } = this.$$
+        const { store, hooks } = this.$$
         store.unwatch('*', this.update)
-        callHook(context, hooks.onUnmount, TyshemoConnectedComponent)
+        callHook(hooks.onUnmount, TyshemoConnectedComponent)
         this.$$ = null
       }
       render() {
@@ -379,7 +379,7 @@ export function makeLocal(getDef) {
           ...props,
         }
 
-        callHook(context, hooks.onRender, Component, connectedProps)
+        callHook(hooks.onRender, Component, connectedProps)
 
         return <Component {...connectedProps}>{children}</Component>
       }
@@ -387,6 +387,133 @@ export function makeLocal(getDef) {
 
     return TyshemoConnectedComponent
   }
+}
+
+/**
+ * hook function
+ * @param {*} define
+ */
+export function useLocal(define) {
+  const [, update] = React.useState()
+  const mounted = React.useRef(false)
+  const { context, hooks, store } = React.useMemo(() => {
+    const def = isFunction(define) ? define() : define
+    const { context, hooks, store } = create(def)
+
+    if (hooks.onUse) {
+      hooks.onUse()
+    }
+
+    if (hooks.onInit) {
+      hooks.onInit()
+    }
+
+    return { context, hooks, store }
+  }, [])
+
+  React.useEffect(() => {
+    if (hooks.onMount) {
+      hooks.onMount()
+    }
+
+    store.watch('*', update, true)
+
+    mounted.current = true
+
+    return () => {
+      if (hooks.onUnmount) {
+        hooks.onUnmount()
+      }
+
+      store.unwatch('*', update, true)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (hooks.onUpdate && mounted.current) {
+      hooks.onUpdate()
+    }
+  })
+
+  return context
+}
+
+/**
+ * create a shared scope state
+ * @param {function} define define function which return state def
+ * @return {array} [context, subscribe, unlink]
+ *   - context
+ *   - subscribe(fn: key, value => void): unsubscribe()
+ *   - unlink() remove reference from memory, should must be invoked when you will not use the context any more
+ * @example
+ * // with hooks
+ * function MyComponent() {
+ *   const [, update] = useState()
+ *   const [context, subscribe, unlink] = useShared(define)
+ *
+ *   useEffect(() => {
+ *     const unsubscribe = subscribe(update)
+ *     return () => {
+ *       unlink() // if needed
+ *       unsubscribe()
+ *     }
+ *   }, [])
+ * }
+ *
+ * // class component
+ * class MyComponent extends React.Component {
+ *   constructor(props) {
+ *     super(props)
+ *     this.state = {}
+ *
+ *     const update = () => this.setState({})
+ *     const [context, subscribe, unlink] = useShared(define)
+ *
+ *     this.context = context
+ *     this.unsubscribe = subscribe(update)
+ *     this.unlink = unlink
+ *   }
+ *
+ *   componentWillUnmount() {
+ *     this.unlink() // if needed
+ *     this.unsubscribe()
+ *   }
+ * }
+ */
+export function useShared(define) {
+  const item = _shared.find(item => item.define === define)
+
+  if (item) {
+    return [item.context, item.subscribe, item.unlink]
+  }
+
+  const def = define()
+  const { context, hooks, store } = create(def)
+  const subscribe = (fn) => {
+    const callback = ({ key, value }) => {
+      fn(key, value)
+    }
+    store.watch('*', callback, true)
+    return () => {
+      store.unwatch('*', callback)
+    }
+  }
+  const unlink = () => _shared.forEach((item, i) => item.define === define && _shared.splice(i, 1))
+
+  const local = {
+    context,
+    define,
+    subscribe,
+    unlink,
+  }
+
+  _shared.push(local)
+
+  if (hooks.onUse) {
+    hooks.onUse()
+  }
+
+  return [context, subscribe, unlink]
 }
 
 /**

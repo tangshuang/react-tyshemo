@@ -63,22 +63,22 @@ use({
     onUse() {},
 
     // after this state space be used to connect to a React component
-    onConnect(names) {},
+    onConnect() {},
 
     // after connected Component created
-    onCreate(TyshemoConnectedComponent)
+    onCreate() {},
 
     // after TyshemoConnectedComponent initialized
-    onInit(TyshemoConnectedComponent) {},
+    onInit() {},
 
     // when TyshemoConnectedComponent componentDidMount
-    onMount(TyshemoConnectedComponent) {},
+    onMount() {},
 
     // when TyshemoConnectedComponent componentDidUpdate
-    onUpdate(TyshemoConnectedComponent) {},
+    onUpdate() {},
 
     // when TyshemoConnectedComponent componentWillUnmount
-    onUnmount(TyshemoConnectedComponent) {},
+    onUnmount() {},
 
     // when TyshemoConnectedComponent render
     // @param Component is the real component to render which is wrapped in TyshemoConnectedComponent
@@ -301,7 +301,7 @@ Recorder.replay((item) => {
 
 However, you should notice that, if you want to send your recorded data to server side, instance of Class will bring up trouble. We do not resolve this, you should do it by your self.
 
-## Local state
+## Local State
 
 Use vue's state management, use react's UI render. If you want to taste replacing vue's template with react, do like this:
 
@@ -386,4 +386,102 @@ function MyComponent(props) {
 }
 ```
 
-And `define` function receive `props` of the component, so that you can use the `props` to generate state.
+**useShared(define)**
+
+Some times, you want to share a state with other components. Do like this:
+
+```js
+// defs.js
+export function define() {
+  return {
+    state: {
+      name: 'some',
+      age: 10,
+    },
+  }
+}
+```
+
+```js
+// componentA.js
+// update age
+import { define } from './defs.js'
+import { useShared } from 'react-tyshemo'
+import { useState, useEffect } from 'react'
+
+export default function MyComponentA() {
+  const [, update] = useState()
+  const [context, subscribe] = useShared(define)
+
+  useEffect(() => subscribe(update), [])
+
+  return (
+    <span onClick={() => context.age ++}>{context.name}: {context.age}</span>
+  )
+}
+```
+
+```js
+// componentB.js
+// clear state from memory
+import { define } from './defs.js'
+import { useShared } from 'react-tyshemo'
+import { useState, useEffect } from 'react'
+
+export default function MyComponentB() {
+  const [context, subscribe, unlink] = useShared(define)
+
+  return (
+    <span onClick={unlink}>clear</span>
+  )
+}
+```
+
+As you see, we share a local state between two components.
+*Notice: the same `define` function referer to the same state, which is the base of sharing, so don't change the define function dymaticly.*
+
+Notice in previous code:
+
+- we provide the same parameter `define` to keep local state in memory
+- we invoke `unlink` in a component at the end of some operation chain to clear memory
+
+*`unlink` should must be invoked somewhere, or you may face memory overflow.*
+
+`useShared` is not a hook function, however you can use it as a hook function.
+
+It returns `[context, subscribe, unlink]`
+
+- context: the state context object
+- subscribe: function, receive a function to react when state change subscribe((key, value) => {}), and return a unsubscribe function, so as you seen, we use `useEffect(() => subscribe(update), [])` directly, unsubscribe will be run when component unmount
+- unlink: remove reference from memory, should must be invoke somewhere when you don't need the state
+
+And, only `onUse` hook method works in `useShared`.
+
+**useLocal(define)**
+
+To use hook function, we provide `useLocal`.
+
+```js
+import { useLocal } from 'react-tyshemo'
+
+export default function MyComponent() {
+  const some = useLocal({
+    state: {
+      name: 'tomy',
+      age: 10,
+    },
+    methods: {
+      updateAge() {
+        // recommend to use `some` instead of `this` even though `this` is supported
+        some.age ++
+      },
+    },
+  })
+
+  return (
+    <span onClick={some.updateAge}>{some.name}: {some.age}</span>
+  )
+}
+```
+
+`useLocal` can also receive a `define` function which returns state def.
