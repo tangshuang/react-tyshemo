@@ -1,6 +1,6 @@
 import React from 'react'
 import { Store, Model } from 'tyshemo'
-import { each, filter, isInstanceOf, isFunction, parse, map, isString } from 'ts-fns'
+import { each, filter, isInstanceOf, isFunction, parse, map, isString, throttle } from 'ts-fns'
 
 const _stores = {}
 const _hooks = {}
@@ -232,9 +232,11 @@ export function connect(mapToProps, mergeToProps) {
       init() {
         callHook('onInit', TyshemoConnectedComponent)
       }
-      update = () => {
+
+      update = throttle(() => {
         this.setState({})
-      }
+      }, 16)
+
       componentDidMount() {
         names.forEach((name) => {
           const store = _stores[name]
@@ -348,10 +350,11 @@ export function makeLocal(define) {
         callHook(hooks.onCreate, TyshemoConnectedComponent)
         callHook(hooks.onInit, TyshemoConnectedComponent)
       }
-      update = () => {
+
+      update = throttle(() => {
         this.setState({})
-      }
-      active = () => {}
+      }, 16)
+
       componentDidMount() {
         const { store, hooks } = this.$$
         store.watch('*', this.update, true)
