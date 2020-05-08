@@ -359,6 +359,7 @@ The `name` of return `def` makes sense. When you give a `name` property, the sta
 ```js
 function define() {
   return {
+    // there is no name
     state: {
       age: 0,
     }
@@ -373,7 +374,7 @@ function MyComponent(props) {
 ```js
 function define() {
   return {
-    name: 'somebody',
+    name: 'somebody', // there is name
     state: {
       age: 10,
     },
@@ -386,77 +387,6 @@ function MyComponent(props) {
 }
 ```
 
-**useShared(define)**
-
-Some times, you want to share a state with other components. Do like this:
-
-```js
-// defs.js
-export function define() {
-  return {
-    state: {
-      name: 'some',
-      age: 10,
-    },
-  }
-}
-```
-
-```js
-// componentA.js
-// update age
-import { define } from './defs.js'
-import { useShared } from 'react-tyshemo'
-import { useState, useEffect } from 'react'
-
-export default function MyComponentA() {
-  const [, update] = useState()
-  const [context, subscribe] = useShared(define)
-
-  useEffect(() => subscribe(update), [])
-
-  return (
-    <span onClick={() => context.age ++}>{context.name}: {context.age}</span>
-  )
-}
-```
-
-```js
-// componentB.js
-// clear state from memory
-import { define } from './defs.js'
-import { useShared } from 'react-tyshemo'
-import { useState, useEffect } from 'react'
-
-export default function MyComponentB() {
-  const [context, subscribe, unlink] = useShared(define)
-
-  return (
-    <span onClick={unlink}>clear</span>
-  )
-}
-```
-
-As you see, we share a local state between two components.
-*Notice: the same `define` function referer to the same state, which is the base of sharing, so don't change the define function dymaticly.*
-
-Notice in previous code:
-
-- we provide the same parameter `define` to keep local state in memory
-- we invoke `unlink` in a component at the end of some operation chain to clear memory
-
-*`unlink` should must be invoked somewhere, or you may face memory overflow.*
-
-`useShared` is not a hook function, however you can use it as a hook function.
-
-It returns `[context, subscribe, unlink]`
-
-- context: the state context object
-- subscribe: function, receive a function to react when state change subscribe((key, value) => {}), and return a unsubscribe function, so as you seen, we use `useEffect(() => subscribe(update), [])` directly, unsubscribe will be run when component unmount
-- unlink: remove reference from memory, should must be invoke somewhere when you don't need the state
-
-And, only `onUse` hook method works in `useShared`.
-
 **useLocal(define)**
 
 To use hook function, we provide `useLocal`.
@@ -466,6 +396,7 @@ import { useLocal } from 'react-tyshemo'
 
 export default function MyComponent() {
   const some = useLocal({
+    // name is not needed
     state: {
       name: 'tomy',
       age: 10,
