@@ -1,6 +1,6 @@
 {
   "name": "react-tyshemo",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "A react state manager drived by tyshemo.",
   "main": "index.js",
   "scripts": {
