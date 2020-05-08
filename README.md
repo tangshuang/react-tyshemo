@@ -1,6 +1,6 @@
 # React-Tyshemo
 
-A react state manager drived by tyshemo.
+A react state managemenet controller drived by tyshemo.
 
 ## Install
 
@@ -16,11 +16,11 @@ import { use, connect } from 'react-tyshemo'
 
 ### use(def)
 
-To create a namespace state.
+To register a namespace store in global scope.
 
 ```js
 use({
-  // should be unique, will be used only the first time
+  // should be unique, same namespace will only be registered at the first time
   name: 'namespace',
 
   // default state
@@ -65,9 +65,6 @@ use({
     // after this state space be used to connect to a React component
     onConnect() {},
 
-    // after connected Component created
-    onCreate() {},
-
     // after TyshemoConnectedComponent initialized
     onInit() {},
 
@@ -79,19 +76,16 @@ use({
 
     // when TyshemoConnectedComponent componentWillUnmount
     onUnmount() {},
-
-    // when TyshemoConnectedComponent render
-    // @param Component is the real component to render which is wrapped in TyshemoConnectedComponent
-    // @param connectedProps is the merged props which pass into wrapped component
-    onRender(Component, connectedProps) {},
   },
 })
 ```
 
 Use `use` in a global file, or in business components when you need.
-One `def` (same namespace) can be `use` only once.
+One namespace can only be `use` once.
 
 ### connect(mapToProps: Function, mergeToProps?: Function): Function
+
+Connect a component with registered stores.
 
 ```js
 function MyComponent(props) {
@@ -107,11 +101,13 @@ function MyComponent(props) {
 }
 
 /**
- * @param {object} contexts the whole state, each context owns a state and methods of the namespace
+ * @param {object} stores the whole state, each context owns a state and methods of the namespace
  */
-const mapToProps = (contexts) => {
-  const { namespace } = contexts
-  const { name, age, growAge } = namespace
+const mapToProps = (stores) => {
+  const {
+    some, // this store's namespace is `some`
+  } = stores
+  const { name, age, growAge } = some
   return {
     name,
     age,
@@ -132,6 +128,21 @@ const mergeToProps = (mappedProps, ownProps) => {
 export default connect(mapToProps, mergeToProps)(MyComponent)
 ```
 
+### getState()
+
+Get whole combined state of all stores.
+
+### subscribe(fn: Function): Function
+
+Subscribe to changes in the state. When any change happens in state, the function `fn` will be invoke.
+It returns a `unsubscribe` function.
+
+```js
+const unsubscribe = subscribe(fn)
+/// ...
+unsubscribe()
+```
+
 ### make(def)
 
 make = use + connect
@@ -141,43 +152,28 @@ const connect = make(def)
 export default connect(MyComponent)
 ```
 
-### getState()
-
-Get whole state.
-
-### subscribe(fn: Function): Function
-
-Subscribe to changes in the state. When any change happens in state, the function `fn` will be invoke.
-The return value is a unsubscribe function.
-
-```js
-const unsubscribe = subscribe(fn)
-/// ...
-unsubscribe()
-```
-
 ## Mutable
 
-Tyshemo Store state in store is mutable, does not like Redux, you should always change the state to trigger UI rerender.
+Tyshemo state in store is mutable, does not like Redux, you should always change the state to trigger UI rerender.
 
-*The best practice is create methods in state def, and invoke methods in components.*
+*The best practice is to create methods in store def, and invoke methods in components.*
 
 ```js
-const mapToProps = (contexts) => {
-  const { namespace } = contexts
+const mapToProps = (stores) => {
+  const { some } = stores
   return {
-    namespace,
+    some,
   }
 }
 ```
 
 ```js
 function MyComponent(props) {
-  const { namespace } = props
-  const { name, age, growAge } = namespace
+  const { some } = props
+  const { name, age, growAge } = some
   // invoke `growAge()` to change state
   // ...
-  return <span onClick={() => growAge()}>{namespace.age}</span>
+  return <span onClick={() => growAge()}>{some.age}</span>
 }
 ```
 
@@ -187,16 +183,16 @@ However, namespace state is a reactive object, so that you can change the object
 
 ```js
 function MyComponent(props) {
-  const { namespace } = props
-  // invoke `namespace.age ++` to change state
+  const { some } = props
+  // invoke `some.age ++` to change state
   // ...
 
-  return <span onClick={() => namespace.age ++}>{namespace.age}</span>
+  return <span onClick={() => some.age ++}>{some.age}</span>
 }
 ```
 
 Now, you do not need to write a `growAge` method.
-However, the best practice is create methods and change state in methods and invoke methods in components, so that you know where the state change.
+However, the best practice is to create methods, to change state in methods and to invoke methods in components, so that you know where the state changes.
 
 **If not reactive data**
 
@@ -245,31 +241,30 @@ Then in component:
 
 ```js
 function MyComponent(props) {
-  const { namespace } = props
-  const some = new Some()
-  namespace.updateSome(some)
+  const { some } = props
+  const a = new Some()
+  some.updateSome(a)
 }
 ```
 
-*It is not recommanded to invoke `dispatch` in components directly.*
+*It is NOT recommanded to invoke `dispatch` in components directly.*
 
 ## Scoped Dependencies
 
-When you use `connect` to wrap a component, it is dependent on the state namespaces which you called in `mapToProps` to rerender. For example:
+When you use `connect` to wrap a component, it is dependent on the namespaces which you called in `mapToProps` to rerender. For example:
 
 ```js
-const mapToProps = (contexts) => {
-  const { state1, state2, state3 } = contexts
-  const { methods3 } = state3
+const mapToProps = (stores) => {
+  const { store1, store2, store3 } = stores
   return {
-    state1,
-    state2,
-    methods3,
+    store1,
+    store1,
+    store3,
   }
 }
 ```
 
-In the previous code, we only used `state1` `state2` `state3`, so only these state namespaces changes, the component will rerender, other state spaces changes in other components will have no affects on this component.
+In the previous code, we only used `store1` `store1` `store3`, so only these stores' states change, the component will rerender, other stores' changes will have no affect on this component.
 
 ## Replay
 
@@ -279,6 +274,9 @@ import Recorder from 'xxx-your-recorder-lib-xxx'
 import { subscribe } from 'react-tyshemo'
 
 // use subscribe to record each change in store
+// -name: store's namespace
+// -key: array, the keyPath of changed node
+// -value: the next value of this key
 subscribe((name, key, value) => {
   Recorder.record({ name, key, value })
 })
@@ -301,7 +299,44 @@ Recorder.replay((item) => {
 
 However, you should notice that, if you want to send your recorded data to server side, instance of Class will bring up trouble. We do not resolve this, you should do it by your self.
 
-## Local State
+## Local/Shared State
+
+In sometimes, you may want to create a local state only for current component.
+
+### useLocalStore(define: Function, deps = [])
+
+To use hook function, we provide `useLocalStore`.
+
+```js
+import { useLocalStore } from 'react-tyshemo'
+
+export default function MyComponent() {
+  const some = useLocalStore(() => {
+    return {
+      // name is not needed
+      state: {
+        name: 'tomy',
+        age: 10,
+      },
+      methods: {
+        updateAge() {
+          // recommend to use `some` instead of `this` even though `this` is supported
+          some.age ++
+        },
+      },
+    }
+  })
+
+  return (
+    <span onClick={some.updateAge}>{some.name}: {some.age}</span>
+  )
+}
+```
+
+- define: function, which is to return a store def. `name` property will have no effect.
+- deps: array, when any one value of `deps` changes, the store will be rebuilt, `deps` is passed into `useMemo`
+
+### makeLocal(define: Function): Function
 
 Use vue's state management, use react's UI render. If you want to taste replacing vue's template with react, do like this:
 
@@ -309,13 +344,11 @@ Use vue's state management, use react's UI render. If you want to taste replacin
 import { makeLocal } from 'react-tyshemo'
 
 // vue's template
-class MyComponent extends React.Component {
-  render() {
-    const { name, age, height, updateAge } = this.props
-    return (
-      <span onClick={updateAge}>{name} {age} {height}</span>
-    )
-  }
+function MyComponent(props) {
+  const { name, age, height, updateAge } = props
+  return (
+    <span onClick={updateAge}>{name} {age} {height}</span>
+  )
 }
 
 // vue's script
@@ -346,13 +379,9 @@ function define() {
 export default makeLocal(define)(MyComponent)
 ```
 
-**makeLocal(define: Function): Function**
+`makeLocal` is used to create a wrapper function (like `connect` does) for local state injection. Some times, you do not need to register state to global, you just want to make it work for local component, then you should use `makeLocal`.
 
-`makeLocal` is used to create a wrapper for local state injection. Some times, you do not need to register state to global, you just want to make it work for local component, then you should use `makeLocal`.
-
-It receive a `define` function which return the state `def`.
-
-Notice that, hooks are run not like `make`, because all things come after component initialized. So, the best practice is only use hooks from `onInit` to `onUmount`.
+- define: function, It receive a `define` function which return the state `def`.
 
 The `name` of return `def` makes sense. When you give a `name` property, the state will patch to props with namespace, if not, the state will patch to props with properties.
 
@@ -387,32 +416,15 @@ function MyComponent(props) {
 }
 ```
 
-**useLocal(define)**
+### makeShared(define: Function): Function
 
-To use hook function, we provide `useLocal`.
+`makeLocal` only works for the wrapped component, the store will be destory when the component unmounts. `makeShared` works for multiple wrapped *live* components.
 
 ```js
-import { useLocal } from 'react-tyshemo'
+const wrap = makeShared(define)
 
-export default function MyComponent() {
-  const some = useLocal({
-    // name is not needed
-    state: {
-      name: 'tomy',
-      age: 10,
-    },
-    methods: {
-      updateAge() {
-        // recommend to use `some` instead of `this` even though `this` is supported
-        some.age ++
-      },
-    },
-  })
-
-  return (
-    <span onClick={some.updateAge}>{some.name}: {some.age}</span>
-  )
-}
+const ComponentA = wrap(A)
+const ComponentB = wrap(B)
 ```
 
-`useLocal` can also receive a `define` function which returns state def.
+Now `ComponentA` and `ComponentB` will share the same store during the components are living. When all components unmount (die), the store will be destory. If some of them mount again, a new store will be created.

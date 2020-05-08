@@ -150,7 +150,8 @@ function create(def) {
  *   }
  * })(MyComponent)
  */
-export function use(def) {
+export function use(define) {
+  const def = isFunction(define) ? define() : define
   const { name } = def
 
   // has been registered
@@ -222,67 +223,146 @@ export function connect(mapToProps, mergeToProps) {
   }
 
   const hooks = filter(_hooks, (_, name) => names.includes(name))
-  const callHook = (fn, ...args) => {
+  const callHook = (fn) => {
     each(hooks, (hooks) => {
       if (hooks[fn]) {
-        hooks[fn](...args)
+        hooks[fn]()
       }
     })
   }
-
-  callHook('onConnect')
 
   return function(Component) {
     class TyshemoConnectedComponent extends React.Component {
       constructor(props) {
         super(props)
         this.state = {}
+        this.update = () => {
+          this.setState({})
+        }
         this.init()
       }
       init() {
-        callHook('onInit', TyshemoConnectedComponent)
+        callHook('onInit')
       }
-
-      update = () => {
-        this.setState({})
-      }
-
       componentDidMount() {
         names.forEach((name) => {
           const store = _stores[name]
           store.watch('*', this.update, true)
         })
-        callHook('onMount', TyshemoConnectedComponent)
+        callHook('onMount')
       }
       componentDidUpdate() {
-        callHook('onUpdate', TyshemoConnectedComponent)
+        callHook('onUpdate')
       }
       componentWillUnmount() {
         names.forEach((name) => {
           const store = _stores[name]
           store.unwatch('*', this.update)
         })
-        callHook('onUnmount', TyshemoConnectedComponent)
+        callHook('onUnmount')
       }
       render() {
         const { children, ...props } = this.props
         const connectedProps = mergeProps(props)
-
-        callHook('onRender', Component, connectedProps)
-
         return <Component {...connectedProps}>{children}</Component>
       }
     }
 
-    callHook('onCreate', TyshemoConnectedComponent)
+    callHook('onConnect')
 
     return TyshemoConnectedComponent
   }
 }
 
 /**
+ * get whole state
+ */
+export function getState() {
+  const state = map(_stores, store => store.state)
+  return state
+}
+
+/**
+ * subscribe to change
+ * @param {function} fn
+ */
+export function subscribe(fn) {
+  _observers.push(fn)
+
+  const unsubscribe = () => {
+    const i = _observers.indexOf(fn)
+    if (i > -1) {
+      _observers.splice(i, 1)
+    }
+  }
+
+  return unsubscribe
+}
+
+
+/**
+ * local hook
+ * @param {function} define
+ */
+export function useLocalStore(define, deps = []) {
+  const [, forceUpdate] = React.useState()
+  const mounted = React.useRef(false)
+  const unmounted = React.useRef(false)
+
+  const callHook = (hook) => {
+    if (isFunction(hook)) {
+      hook()
+    }
+  }
+
+  const { context, hooks, store } = React.useMemo(() => {
+    const def = define()
+    const { context, hooks, store } = create(def)
+
+    callHook(hooks.onUse)
+    callHook(hooks.onConnect)
+    callHook(hooks.onInit)
+
+    return { context, hooks, store }
+  }, deps)
+
+  React.useEffect(() => {
+    callHook(hooks.onMount)
+    mounted.current = true
+    return () => {
+      unmounted.current = true
+    }
+  }, [])
+
+  React.useEffect(() => {
+    const update = () => {
+      if (!unmounted.current) {
+        forceUpdate()
+      }
+    }
+
+    store.watch('*', update, true)
+    return () => {
+      if (unmounted.current) {
+        callHook(hooks.onUnmount)
+      }
+
+      store.unwatch('*', update, true)
+    }
+  }, [store, hooks])
+
+  React.useEffect(() => {
+    if (mounted.current) {
+      callHook(hooks.onUpdate)
+    }
+  }, [hooks])
+
+  return context
+}
+
+/**
  * use def, and return a connect function which contains only this namespace
- * @param {*} def
+ * @param {function|object} define
  * @example
  * const connect = make({
  *   name: 'myState',
@@ -298,7 +378,8 @@ export function connect(mapToProps, mergeToProps) {
  *
  * export default connect(MyComponent)
  */
-export function make(def) {
+export function make(define) {
+  const def = isFunction(define) ? define() : define
   const { name } = def
   use(def)
   return connect((contexts) => ({
@@ -331,21 +412,26 @@ export function make(def) {
  * export default connect(MyComponent)
  */
 export function makeLocal(define) {
-  const callHook = (hook, ...args) => {
-    if (isFunction(hook)) {
-      hook(args)
-    }
-  }
   return function(Component) {
+    const callHook = (hook) => {
+      if (isFunction(hook)) {
+        hook()
+      }
+    }
+
     class TyshemoConnectedComponent extends React.Component {
       constructor(props) {
         super(props)
         this.state = {}
+        this.update = () => {
+          this.setState({})
+        }
         this.init()
       }
       init() {
         const def = define()
-        const { name, store, hooks, context } = create(def)
+        const { name } = def
+        const { store, hooks, context } = create(def)
 
         this.$$ = {
           name,
@@ -356,32 +442,25 @@ export function makeLocal(define) {
 
         callHook(hooks.onUse)
         callHook(hooks.onConnect)
-
-        callHook(hooks.onCreate, TyshemoConnectedComponent)
-        callHook(hooks.onInit, TyshemoConnectedComponent)
+        callHook(hooks.onInit)
       }
-
-      update = () => {
-        this.setState({})
-      }
-
       componentDidMount() {
         const { store, hooks } = this.$$
         store.watch('*', this.update, true)
-        callHook(hooks.onMount, TyshemoConnectedComponent)
+        callHook(hooks.onMount)
       }
       componentDidUpdate() {
         const { hooks } = this.$$
-        callHook(hooks.onUpdate, TyshemoConnectedComponent)
+        callHook(hooks.onUpdate)
       }
       componentWillUnmount() {
         const { store, hooks } = this.$$
         store.unwatch('*', this.update)
-        callHook(hooks.onUnmount, TyshemoConnectedComponent)
+        callHook(hooks.onUnmount)
         this.$$ = null
       }
       render() {
-        const { name, context, hooks } = this.$$
+        const { name, context } = this.$$
         const { children, ...props } = this.props
 
         const connectedProps = name ? {
@@ -392,8 +471,6 @@ export function makeLocal(define) {
           ...props,
         }
 
-        callHook(hooks.onRender, Component, connectedProps)
-
         return <Component {...connectedProps}>{children}</Component>
       }
     }
@@ -403,83 +480,102 @@ export function makeLocal(define) {
 }
 
 /**
- * hook function
- * @param {object|function} define
+ *
+ * @param {function} define
  */
-export function useLocal(define) {
-  const [, update] = React.useState()
-  const mounted = React.useRef(false)
-  const unmounted = React.useRef(false)
-
-  const [state] = React.useState(() => {
-    const def = isFunction(define) ? define() : define
-    const { context, hooks, store } = create(def)
-
-    if (hooks.onUse) {
-      hooks.onUse()
-    }
-
-    if (hooks.onInit) {
-      hooks.onInit()
-    }
-
-    return { context, hooks, store }
-  })
-  const { context, hooks, store } = state
-
-  React.useEffect(() => {
-    if (hooks.onMount) {
-      hooks.onMount()
-    }
-
-    store.watch('*', () => {
-      if (!unmounted.current) {
-        update()
-      }
-    }, true)
-
-    mounted.current = true
-
-    return () => {
-      if (hooks.onUnmount) {
-        hooks.onUnmount()
-      }
-
-      store.unwatch('*', update, true)
-      unmounted.current = true
-    }
-  }, [])
-
-  React.useEffect(() => {
-    if (hooks.onUpdate && mounted.current) {
-      hooks.onUpdate()
-    }
-  })
-
-  return context
-}
-
-/**
- * get whole state
- */
-export function getState() {
-  const state = map(_stores, store => store.state)
-  return state
-}
-
-/**
- * subscribe to change
- * @param {function} fn
- */
-export function subscribe(fn) {
-  _observers.push(fn)
-
-  const unsubscribe = () => {
-    const i = _observers.indexOf(fn)
-    if (i > -1) {
-      _observers.splice(i, 1)
-    }
+export function makeShared(define) {
+  const memo = {
+    store: null,
+    hooks: null,
+    context: null,
   }
 
-  return unsubscribe
+  const free = () => {
+    Object.assign(memo, {
+      store: null,
+      hooks: null,
+      context: null,
+    })
+  }
+
+  let count = 0
+
+  return function(Component) {
+    const callHook = (hook) => {
+      if (isFunction(hook)) {
+        hook()
+      }
+    }
+
+    class TyshemoConnectedComponent extends React.Component {
+      constructor(props) {
+        super(props)
+        this.state = {}
+        this.update = () => {
+          this.setState({})
+        }
+        this.init()
+      }
+      init() {
+        // build def when not exist
+        if (!memo.store || !memo.hooks || !memo.context) {
+          const def = define()
+          const { name } = def
+          const { store, hooks, context } = create(def)
+          Object.assign(memo, {
+            store,
+            hooks,
+            context,
+            name,
+          })
+          callHook(hooks.onUse)
+          callHook(hooks.onConnect)
+        }
+
+        callHook(memo.hooks.onInit)
+
+        count ++
+      }
+      componentDidMount() {
+        memo.store.watch('*', this.update, true)
+        callHook(memo.hooks.onMount)
+      }
+      componentDidUpdate() {
+        callHook(memo.hooks.onUpdate)
+      }
+      componentWillUnmount() {
+        memo.store.unwatch('*', this.update)
+        callHook(memo.hooks.onUnmount)
+
+        count --
+        // ensure count >= 0
+        if (count < 0) {
+          count = 0
+        }
+        // free memory
+        // use a timeout to wait for possible route redirect
+        setTimeout(() => {
+          if (count <= 0) {
+            free()
+          }
+        }, 100)
+      }
+      render() {
+        const { children, ...props } = this.props
+
+        const { name, context } = memo
+        const connectedProps = name ? {
+          [name]: context,
+          ...props,
+        } : {
+          ...context,
+          ...props,
+        }
+
+        return <Component {...connectedProps}>{children}</Component>
+      }
+    }
+
+    return TyshemoConnectedComponent
+  }
 }
