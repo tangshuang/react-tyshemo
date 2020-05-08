@@ -337,7 +337,7 @@ export function useLocalStore(define, deps = []) {
   React.useEffect(() => {
     const update = () => {
       if (!unmounted.current) {
-        forceUpdate()
+        forceUpdate({})
       }
     }
 
