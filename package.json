@@ -30,8 +30,10 @@
     "@babel/preset-react": "^7.9.4"
   },
   "dependencies": {
-    "react": "^16.13.1",
     "ts-fns": "^6.1.0",
     "tyshemo": "^5.5.2"
+  },
+  "peerDependencies": {
+    "react": "^16.13.1"
   }
 }
