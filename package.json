@@ -31,7 +31,7 @@
   },
   "dependencies": {
     "ts-fns": "^6.1.0",
-    "tyshemo": "^5.5.2"
+    "tyshemo": "^5.9.0"
   },
   "peerDependencies": {
     "react": "^16.13.1"

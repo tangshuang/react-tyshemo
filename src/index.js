@@ -2,6 +2,8 @@ import React from 'react'
 import { Store, Model } from 'tyshemo'
 import { each, filter, isInstanceOf, isFunction, parse, map, isString } from 'ts-fns'
 
+export { Model }
+
 const _stores = {}
 const _hooks = {}
 const _contexts = {}
@@ -358,6 +360,40 @@ export function useLocalStore(define, deps = []) {
   }, [hooks])
 
   return context
+}
+
+/**
+ *
+ * @param {*} define return a Model
+ * @param {*} deps
+ */
+export function useLocalModel(define, deps = []) {
+  const [, forceUpdate] = React.useState()
+  const unmounted = React.useRef(false)
+
+  const UseModel = React.useMemo(() => define(), [])
+  const model = React.useMemo(() => new UseModel(), deps)
+
+  React.useEffect(() => {
+    return () => {
+      unmounted.current = true
+    }
+  }, [])
+
+  React.useEffect(() => {
+    const update = () => {
+      if (!unmounted.current) {
+        forceUpdate({})
+      }
+    }
+
+    model.watch('*', update, true)
+    return () => {
+      model.unwatch('*', update, true)
+    }
+  }, [model])
+
+  return model
 }
 
 /**
