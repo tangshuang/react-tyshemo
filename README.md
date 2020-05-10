@@ -152,7 +152,9 @@ const connect = make(def)
 export default connect(MyComponent)
 ```
 
-## Mutable
+The store is on a named prop, try it to find out.
+
+## Mutable State
 
 Tyshemo state in store is mutable, does not like Redux, you should always change the state to trigger UI rerender.
 
@@ -299,19 +301,19 @@ Recorder.replay((item) => {
 
 However, you should notice that, if you want to send your recorded data to server side, instance of Class will bring up trouble. We do not resolve this, you should do it by your self.
 
-## Local/Shared State
+## Local/Shared State/Model
 
 In sometimes, you may want to create a local state only for current component.
 
-### useLocalStore(define: Function, deps = [])
+### useLocal(define: Function, deps = [])
 
-To use hook function, we provide `useLocalStore`.
+To use hook function, we provide `useLocal`.
 
 ```js
-import { useLocalStore } from 'react-tyshemo'
+import { useLocal } from 'react-tyshemo'
 
 export default function MyComponent() {
-  const some = useLocalStore(() => {
+  const store = useLocal(() => {
     return {
       // name is not needed
       state: {
@@ -320,21 +322,53 @@ export default function MyComponent() {
       },
       methods: {
         updateAge() {
-          // recommend to use `some` instead of `this` even though `this` is supported
-          some.age ++
+          this.age ++
         },
       },
     }
   })
 
   return (
-    <span onClick={some.updateAge}>{some.name}: {some.age}</span>
+    <span onClick={store.updateAge}>{some.name}: {some.age}</span>
   )
 }
 ```
 
 - define: function, which is to return a store def. `name` property will have no effect.
 - deps: array, when any one value of `deps` changes, the store will be rebuilt, `deps` is passed into `useMemo`
+
+In sometimes, you do need a Model, not a store, you should do like this:
+
+```js
+import { useLocal } from 'react-tyshemo'
+
+export default function MyComponent() {
+  const model = useLocal((Model) => {
+    class MyModel extends Model {
+      static name = {
+        default: 'tomy',
+      }
+
+      static age = {
+        default: 10,
+        getter: v => v + '',
+        setter: v => +v,
+      }
+
+      updateAge() {
+        this.age ++
+      }
+    }
+    // return Model directly, don't initialize it
+    return MyModel
+  })
+
+  // however, now you receive a instance of MyModel
+  return (
+    <span onClick={model.updateAge}>{model.name}: {model.age}</span>
+  )
+}
+```
 
 ### makeLocal(define: Function): Function
 
@@ -416,6 +450,32 @@ function MyComponent(props) {
 }
 ```
 
+`define` support to return a Model like `useLocal` do. However, if you want to name it, you can return an object like this:
+
+```js
+function define(Model) {
+  class MyModel extends Model {
+    static name = {
+      default: 'tomy',
+    }
+
+    static age = {
+      default: 10,
+      getter: v => v + '',
+      setter: v => +v,
+    }
+
+    updateAge() {
+      this.age ++
+    }
+  }
+  return {
+    name: 'some', // use a `name` property to make name works
+    model: MyModel,
+  }
+}
+```
+
 ### makeShared(define: Function): Function
 
 `makeLocal` only works for the wrapped component, the store will be destory when the component unmounts. `makeShared` works for multiple wrapped *live* components.
@@ -427,4 +487,4 @@ const ComponentA = wrap(A)
 const ComponentB = wrap(B)
 ```
 
-Now `ComponentA` and `ComponentB` will share the same store during the components are living. When all components unmount (die), the store will be destory. If some of them mount again, a new store will be created.
+Now `ComponentA` and `ComponentB` will share the same store during the components are living. When all components unmount (die), the store will be destoried. If some of them mount again, a new store will be created.

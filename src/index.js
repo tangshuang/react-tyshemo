@@ -1,6 +1,16 @@
 import React from 'react'
 import { Store, Model } from 'tyshemo'
-import { each, filter, isInstanceOf, isFunction, parse, map, isString } from 'ts-fns'
+import {
+  each,
+  filter,
+  isInstanceOf,
+  isFunction,
+  parse,
+  map,
+  isString,
+  isInheritedOf,
+  isObject,
+} from 'ts-fns'
 
 export { Model }
 
@@ -306,30 +316,41 @@ export function subscribe(fn) {
  * local hook
  * @param {function} define
  */
-export function useLocalStore(define, deps = []) {
+export function useLocal(define, deps = []) {
   const [, forceUpdate] = React.useState()
   const mounted = React.useRef(false)
   const unmounted = React.useRef(false)
 
-  const callHook = (hook) => {
+  const callHook = React.useCallback((hooks, fn) => {
+    if (!hooks) {
+      return
+    }
+
+    const hook = hooks[fn]
     if (isFunction(hook)) {
       hook()
     }
-  }
+  }, [])
 
-  const { context, hooks, store } = React.useMemo(() => {
-    const def = define()
+  const { context, hooks, store, model } = React.useMemo(() => {
+    const def = define(Model)
+
+    if (isInheritedOf(def, Model)) {
+      const model = new def()
+      return { model }
+    }
+
     const { context, hooks, store } = create(def)
 
-    callHook(hooks.onUse)
-    callHook(hooks.onConnect)
-    callHook(hooks.onInit)
+    callHook(hooks, 'onUse')
+    callHook(hooks, 'onConnect')
+    callHook(hooks, 'onInit')
 
     return { context, hooks, store }
   }, deps)
 
   React.useEffect(() => {
-    callHook(hooks.onMount)
+    callHook(hooks, 'onMount')
     mounted.current = true
     return () => {
       unmounted.current = true
@@ -343,57 +364,26 @@ export function useLocalStore(define, deps = []) {
       }
     }
 
-    store.watch('*', update, true)
+    const target = model || store
+
+    target.watch('*', update, true)
     return () => {
       if (unmounted.current) {
-        callHook(hooks.onUnmount)
+        callHook(hooks, 'onUnmount')
       }
 
-      store.unwatch('*', update, true)
+      target.unwatch('*', update, true)
     }
-  }, [store, hooks])
+  }, [model, store, hooks])
 
   React.useEffect(() => {
     if (mounted.current) {
-      callHook(hooks.onUpdate)
+      callHook(hooks, 'onUpdate')
     }
   }, [hooks])
 
-  return context
-}
-
-/**
- *
- * @param {*} define return a Model
- * @param {*} deps
- */
-export function useLocalModel(define, deps = []) {
-  const [, forceUpdate] = React.useState()
-  const unmounted = React.useRef(false)
-
-  const UseModel = React.useMemo(() => define(), [])
-  const model = React.useMemo(() => new UseModel(), deps)
-
-  React.useEffect(() => {
-    return () => {
-      unmounted.current = true
-    }
-  }, [])
-
-  React.useEffect(() => {
-    const update = () => {
-      if (!unmounted.current) {
-        forceUpdate({})
-      }
-    }
-
-    model.watch('*', update, true)
-    return () => {
-      model.unwatch('*', update, true)
-    }
-  }, [model])
-
-  return model
+  const target = model || context
+  return target
 }
 
 /**
@@ -449,7 +439,12 @@ export function make(define) {
  */
 export function makeLocal(define) {
   return function(Component) {
-    const callHook = (hook) => {
+    const callHook = (hooks, fn) => {
+      if (!hooks) {
+        return
+      }
+
+      const hook = hooks[fn]
       if (isFunction(hook)) {
         hook()
       }
@@ -465,47 +460,55 @@ export function makeLocal(define) {
         this.init()
       }
       init() {
-        const def = define()
-        const { name } = def
-        const { store, hooks, context } = create(def)
+        const def = define(Model)
 
-        this.$$ = {
-          name,
-          store,
-          hooks,
-          context,
+        if (isInheritedOf(def, Model)) {
+          const received = new def()
+          const { name, model } = isObject(received) ? received : { model: received }
+          this.$$ = { name, model }
         }
+        else {
+          const { name } = def
+          const { store, hooks, context } = create(def)
 
-        callHook(hooks.onUse)
-        callHook(hooks.onConnect)
-        callHook(hooks.onInit)
+          this.$$ = { name, store, hooks, context }
+
+          callHook(hooks, 'onUse')
+          callHook(hooks, 'onConnect')
+          callHook(hooks, 'onInit')
+        }
       }
       componentDidMount() {
-        const { store, hooks } = this.$$
-        store.watch('*', this.update, true)
-        callHook(hooks.onMount)
+        const { model, store, hooks } = this.$$
+        const target = model || store
+        target.watch('*', this.update, true)
+        callHook(hooks, 'onMount')
       }
       componentDidUpdate() {
         const { hooks } = this.$$
-        callHook(hooks.onUpdate)
+        callHook(hooks, 'onUpdate')
       }
       componentWillUnmount() {
-        const { store, hooks } = this.$$
-        store.unwatch('*', this.update)
-        callHook(hooks.onUnmount)
+        const { model, store, hooks } = this.$$
+        const target = model || store
+        target.unwatch('*', this.update)
+        callHook(hooks, 'onUnmount')
         this.$$ = null
       }
       render() {
-        const { name, context } = this.$$
+        const { name, context, model } = this.$$
         const { children, ...props } = this.props
 
-        const connectedProps = name ? {
-          [name]: context,
-          ...props,
-        } : {
-          ...context,
-          ...props,
-        }
+        const target = model || context
+        const connectedProps =
+          name
+          ? {
+              [name]: target,
+              ...props,
+            }
+          : model
+            ? { model, ...props }
+            : { ...context, ...props }
 
         return <Component {...connectedProps}>{children}</Component>
       }
@@ -524,6 +527,7 @@ export function makeShared(define) {
     store: null,
     hooks: null,
     context: null,
+    model: null,
   }
 
   const free = () => {
@@ -531,13 +535,19 @@ export function makeShared(define) {
       store: null,
       hooks: null,
       context: null,
+      model: null,
     })
   }
 
   let count = 0
 
   return function(Component) {
-    const callHook = (hook) => {
+    const callHook = (hooks, fn) => {
+      if (!hooks) {
+        return
+      }
+
+      const hook = hooks[fn]
       if (isFunction(hook)) {
         hook()
       }
@@ -555,33 +565,45 @@ export function makeShared(define) {
       init() {
         // build def when not exist
         if (!memo.store || !memo.hooks || !memo.context) {
-          const def = define()
-          const { name } = def
-          const { store, hooks, context } = create(def)
-          Object.assign(memo, {
-            store,
-            hooks,
-            context,
-            name,
-          })
-          callHook(hooks.onUse)
-          callHook(hooks.onConnect)
+          const def = define(Model)
+
+          if (isInheritedOf(def, Model)) {
+            const received = new def()
+            const { name, model } = isObject(received) ? received : { model: received }
+            Object.assign(memo, { name, model })
+          }
+          else {
+            const { name } = def
+            const { store, hooks, context } = create(def)
+            Object.assign(memo, {
+              store,
+              hooks,
+              context,
+              name,
+            })
+            callHook(hooks, 'onUse')
+            callHook(hooks, 'onConnect')
+          }
         }
 
-        callHook(memo.hooks.onInit)
+        callHook(memo.hooks, 'onInit')
 
         count ++
       }
       componentDidMount() {
-        memo.store.watch('*', this.update, true)
-        callHook(memo.hooks.onMount)
+        const { model, store, hooks } = memo
+        const target = model || store
+        target.watch('*', this.update, true)
+        callHook(hooks, 'onMount')
       }
       componentDidUpdate() {
-        callHook(memo.hooks.onUpdate)
+        callHook(memo.hooks, 'onUpdate')
       }
       componentWillUnmount() {
-        memo.store.unwatch('*', this.update)
-        callHook(memo.hooks.onUnmount)
+        const { model, store, hooks } = memo
+        const target = model || store
+        target.unwatch('*', this.update)
+        callHook(hooks, 'onUnmount')
 
         count --
         // ensure count >= 0
@@ -597,16 +619,19 @@ export function makeShared(define) {
         }, 100)
       }
       render() {
+        const { name, context, model } = memo
         const { children, ...props } = this.props
 
-        const { name, context } = memo
-        const connectedProps = name ? {
-          [name]: context,
-          ...props,
-        } : {
-          ...context,
-          ...props,
-        }
+        const target = model || context
+        const connectedProps =
+          name
+          ? {
+              [name]: target,
+              ...props,
+            }
+          : model
+            ? { model, ...props }
+            : { ...context, ...props }
 
         return <Component {...connectedProps}>{children}</Component>
       }
