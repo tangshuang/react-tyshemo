@@ -9,10 +9,7 @@ import {
   map,
   isString,
   isInheritedOf,
-  isObject,
 } from 'ts-fns'
-
-export { Model }
 
 const _stores = {}
 const _hooks = {}
