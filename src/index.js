@@ -463,9 +463,8 @@ export function makeLocal(define) {
         const def = define(Model)
 
         if (isInheritedOf(def, Model)) {
-          const received = new def()
-          const { name, model } = isObject(received) ? received : { model: received }
-          this.$$ = { name, model }
+          const model = new def()
+          this.$$ = { model }
         }
         else {
           const { name } = def
@@ -564,13 +563,12 @@ export function makeShared(define) {
       }
       init() {
         // build def when not exist
-        if (!memo.store || !memo.hooks || !memo.context) {
+        if (!memo.store && !memo.hooks && !memo.context && !memo.model) {
           const def = define(Model)
 
           if (isInheritedOf(def, Model)) {
-            const received = new def()
-            const { name, model } = isObject(received) ? received : { model: received }
-            Object.assign(memo, { name, model })
+            const model = new def()
+            Object.assign(memo, { model })
           }
           else {
             const { name } = def
