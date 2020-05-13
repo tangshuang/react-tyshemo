@@ -9,6 +9,7 @@ import {
   map,
   isString,
   isInheritedOf,
+  isObject,
 } from 'ts-fns'
 
 const _stores = {}
@@ -106,7 +107,7 @@ function create(def) {
   $store.observe(
     v => isInstanceOf(v, Model),
     (dispatch, model) => model.watch('*', dispatch, true),
-    (dispatch, model) => model.unwatch('*', dispatch, true),
+    (dispatch, model) => model.unwatch('*', dispatch),
   )
 
   // watch
@@ -381,6 +382,87 @@ export function useLocal(define, deps = []) {
 
   const target = model || context
   return target
+}
+
+/**
+ * use hook
+ * @param {*} name
+ */
+export function useGlobal(name) {
+  const [, forceUpdate] = React.useState()
+  const mounted = React.useRef(false)
+  const unmounted = React.useRef(false)
+
+  const callHook = React.useCallback((hooks, fn) => {
+    if (!hooks) {
+      return
+    }
+
+    const hook = hooks[fn]
+    if (isFunction(hook)) {
+      hook()
+    }
+  }, [])
+
+  const { context, hooks, store } = React.useMemo(() => {
+    if (isFunction(name)) {
+      const def = name()
+      use(def)
+      name = def.name
+    }
+    else if (isObject(name)) {
+      use(name)
+      name = name.name
+    }
+
+    const store = _stores[name]
+
+
+    if (!store) {
+      return null
+    }
+
+    const context = _contexts[name]
+    const hooks = _hooks[name]
+
+    callHook(hooks, 'onConnect')
+    callHook(hooks, 'onInit')
+
+    return { context, hooks, store }
+  }, deps)
+
+  React.useEffect(() => {
+    callHook(hooks, 'onMount')
+    mounted.current = true
+    return () => {
+      unmounted.current = true
+    }
+  }, [])
+
+  React.useEffect(() => {
+    const update = () => {
+      if (!unmounted.current) {
+        forceUpdate({})
+      }
+    }
+
+    store.watch('*', update, true)
+    return () => {
+      if (unmounted.current) {
+        callHook(hooks, 'onUnmount')
+      }
+
+      store.unwatch('*', update, true)
+    }
+  }, [store, hooks])
+
+  React.useEffect(() => {
+    if (mounted.current) {
+      callHook(hooks, 'onUpdate')
+    }
+  }, [hooks])
+
+  return context
 }
 
 /**

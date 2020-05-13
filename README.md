@@ -301,7 +301,7 @@ Recorder.replay((item) => {
 
 However, you should notice that, if you want to send your recorded data to server side, instance of Class will bring up trouble. We do not resolve this, you should do it by your self.
 
-## Local/Shared State/Model
+## Local/Shared/Global State
 
 In sometimes, you may want to create a local state only for current component.
 
@@ -488,3 +488,38 @@ const ComponentB = wrap(B)
 ```
 
 Now `ComponentA` and `ComponentB` will share the same store during the components are living. When all components unmount (die), the store will be destoried. If some of them mount again, a new store will be created.
+
+
+### useGlobal(name|def|define)
+
+React hook function to use a store which is registered globally.
+
+- name: when you pass a name, it means you have registered the namespace store globally
+- def: a def object, if namespace exist, return the store directly, or it registers the store and return it
+- define: a function return def object, the same behaviour with `def`
+
+```js
+function MyComponent(props) {
+  const store = useStore('my-store')
+  // if 'my-store' is not registed by `use`, you will get `null`
+  if (store) {
+    // ...
+  }
+}
+```
+
+```js
+function MyComponent(props) {
+  const store = useStore({
+    name: 'my-store',
+    // if 'my-store' has been registered, you will get the registered store, this state will have no effects
+    // if not registered, this will be used as default state
+    state: {
+      a: 1,
+      b: 2,
+    },
+  })
+}
+```
+
+It is NOT recommended to use `useGlobal`, this make code dispersed, you may not know where was a store registered. It is best to use `connect`.
