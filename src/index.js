@@ -106,8 +106,8 @@ function create(def) {
    */
   $store.observe(
     v => isInstanceOf(v, Model),
-    (dispatch, model) => model.watch('*', dispatch, true),
-    (dispatch, model) => model.unwatch('*', dispatch),
+    v => dispatch => v.watch('*', dispatch, true),
+    v => dispatch => v.unwatch('*', dispatch),
   )
 
   // watch
