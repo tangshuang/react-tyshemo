@@ -466,6 +466,36 @@ export function useGlobal(name) {
 }
 
 /**
+ *
+ * @param {*} subscribe
+ * @param {*} unsubscribe
+ */
+export function useObserver(subscribe, unsubscribe) {
+  // subscribe store or model directly
+  if (isInstanceOf(subscribe, Store) || isInstanceOf(subscribe, Model)) {
+    useObserver(
+      dispatch => subscribe.watch('*', dispatch, true),
+      dispatch => subscribe.unwatch('*', dispatch),
+    )
+    return
+  }
+
+  const [, update] = React.useState()
+  React.useEffect(() => {
+    const forceUpdate = () => update({})
+    const _unsubscribe = subscribe(forceUpdate)
+    return () => {
+      if (isFunction(_unsubscribe)) {
+        _unsubscribe()
+      }
+      if (unsubscribe) {
+        unsubscribe(forceUpdate)
+      }
+    }
+  }, [])
+}
+
+/**
  * use def, and return a connect function which contains only this namespace
  * @param {function|object} define
  * @example

@@ -154,6 +154,45 @@ export default connect(MyComponent)
 
 The store is on a named prop, try it to find out.
 
+### useObserver(subscribe, unsubscribe?)
+
+This is a helper hook function which help you observe some reactive object to rerender.
+
+```js
+function MyComponent(props) {
+  const { reactiveObject } = props
+
+  useObserver(
+    dispatch => reactiveObject.on('change', dispatch), // when reactiveObject changes inside, the component will rerender
+    dispatch => reactiveObject.off('change', dispatch), // when the component will unmount, this function will run to free memory reference
+  )
+
+  /// ....
+}
+```
+
+If subscribe function return a function, we will run this function before `unsubscribe`. And `unsubscribe` is optional, so in some system, you can use the return function as unsubscribe function.
+
+```js
+useObserver(dispatch => some.watch('a', dispatch)) // watch will return unwatch function
+```
+
+If you get a store or a model instance, you do not need to pass subscribe/unsubscribe function, just pass the store or the model.
+
+```js
+function MyComponent(props) {
+  const { model } = props
+
+  useObserver(model)
+
+  /// ....
+}
+```
+
+It will subscribe and unsubscribe automaticly.
+
+This hook function can not only be used with store and model, but also with any reactive system.
+
 ## Mutable State
 
 Tyshemo state in store is mutable, does not like Redux, you should always change the state to trigger UI rerender.
@@ -489,28 +528,17 @@ const ComponentB = wrap(B)
 
 Now `ComponentA` and `ComponentB` will share the same store during the components are living. When all components unmount (die), the store will be destoried. If some of them mount again, a new store will be created.
 
-
-### useGlobal(name|def|define)
+### useGlobal(define|def|name)
 
 React hook function to use a store which is registered globally.
 
-- name: when you pass a name, it means you have registered the namespace store globally
-- def: a def object, if namespace exist, return the store directly, or it registers the store and return it
 - define: a function return def object, the same behaviour with `def`
+- def: a def object, if namespace exist, return the store directly, or it registers the store and return it
+- name: when you pass a name, it means you have registered the namespace store globally
 
 ```js
-function MyComponent(props) {
-  const store = useStore('my-store')
-  // if 'my-store' is not registed by `use`, you will get `null`
-  if (store) {
-    // ...
-  }
-}
-```
-
-```js
-function MyComponent(props) {
-  const store = useStore({
+function define() {
+  return {
     name: 'my-store',
     // if 'my-store' has been registered, you will get the registered store, this state will have no effects
     // if not registered, this will be used as default state
@@ -518,8 +546,38 @@ function MyComponent(props) {
       a: 1,
       b: 2,
     },
-  })
+  }
+}
+
+function MyComponent(props) {
+  const store = useGlobal(define)
 }
 ```
 
-It is NOT recommended to use `useGlobal`, this make code dispersed, you may not know where was a store registered. It is best to use `connect`.
+```js
+const def = {
+  name: 'my-store',
+  // if 'my-store' has been registered, you will get the registered store, this state will have no effects
+  // if not registered, this will be used as default state
+  state: {
+    a: 1,
+    b: 2,
+  },
+}
+
+function MyComponent(props) {
+  const store = useGlobal(def)
+}
+```
+
+```js
+function MyComponent(props) {
+  const store = useGlobal('my-store')
+  // if 'my-store' is not registed by `use`, you will get `null`
+  if (store) {
+    // ...
+  }
+}
+```
+
+It is NOT recommended to use `name`, this make code dispersed, you may not know where was a store registered. It is best to use `connect`.
