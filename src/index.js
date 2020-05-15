@@ -331,7 +331,7 @@ export function useLocal(define, deps = []) {
   }, [])
 
   const { context, hooks, store, model } = React.useMemo(() => {
-    const def = define(Model)
+    const def = define()
 
     if (isInheritedOf(def, Model)) {
       const model = new def()
@@ -569,7 +569,7 @@ export function makeLocal(define) {
         this.init()
       }
       init() {
-        const def = define(Model)
+        const def = define()
 
         if (isInheritedOf(def, Model)) {
           const model = new def()
@@ -673,7 +673,7 @@ export function makeShared(define) {
       init() {
         // build def when not exist
         if (!memo.store && !memo.hooks && !memo.context && !memo.model) {
-          const def = define(Model)
+          const def = define()
 
           if (isInheritedOf(def, Model)) {
             const model = new def()
