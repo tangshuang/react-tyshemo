@@ -162,7 +162,7 @@ function create(def) {
  */
 export function use(define) {
   const def = isFunction(define) ? define() : define
-  const { name } = def
+  const { name, state } = def
 
   // has been registered
   if (_stores[name]) {
@@ -181,12 +181,18 @@ export function use(define) {
   _contexts[name] = $context
 
   // subscribe
-  $store.watch('*', ({ key, value }) => {
+  const trigger = ({ key, value }) => {
     if (_observers.length) {
       _observers.forEach((fn) => {
         fn(name, key, value)
       })
     }
+  }
+  $store.watch('*', trigger)
+  // trigger when a new store is used
+  trigger({
+    key: '',
+    value: state,
   })
 
   // onUse
@@ -199,10 +205,11 @@ export function use(define) {
 
 /**
  *
- * @param {function} map
+ * @param {function} mapToProps
  *  - state the whole state of tyshemo-react
  *  - props the original props received by component
  *  - return: props to pass to component
+ * @param {function} mergeToProps
  * @example
  * export default connect(function map(state, methods, props) {
  *   const { some, project } = state
@@ -309,10 +316,9 @@ export function subscribe(fn) {
   return unsubscribe
 }
 
-
 /**
- * local hook
- * @param {function} define
+ * local state, create when component create, destory when component unmount
+ * @param {function} define store changes when deps changes
  */
 export function useLocal(define, deps = []) {
   const [, forceUpdate] = React.useState()
@@ -417,9 +423,8 @@ export function useGlobal(name) {
 
     const store = _stores[name]
 
-
     if (!store) {
-      return null
+      return {} // make descontruct work, don't throw error
     }
 
     const context = _contexts[name]
@@ -429,7 +434,7 @@ export function useGlobal(name) {
     callHook(hooks, 'onInit')
 
     return { context, hooks, store }
-  }, deps)
+  })
 
   React.useEffect(() => {
     callHook(hooks, 'onMount')
@@ -440,6 +445,10 @@ export function useGlobal(name) {
   }, [])
 
   React.useEffect(() => {
+    if (!store) {
+      return
+    }
+
     const update = () => {
       if (!unmounted.current) {
         forceUpdate({})
