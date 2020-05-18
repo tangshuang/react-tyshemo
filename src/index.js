@@ -320,7 +320,7 @@ export function subscribe(fn) {
  * local store, create when component create, destory when component unmount
  * @param {function} define store changes when deps changes
  */
-export function useLocal(define, deps = []) {
+export function useLocalStore(define, deps = []) {
   const [, forceUpdate] = React.useState()
   const mounted = React.useRef(false)
   const unmounted = React.useRef(false)
@@ -413,7 +413,7 @@ export function useLocal(define, deps = []) {
  * use hook
  * @param {*} name
  */
-export function useGlobal(name) {
+export function useGlobalStore(name) {
   const [, forceUpdate] = React.useState()
   const mounted = React.useRef(false)
   const unmounted = React.useRef(false)
