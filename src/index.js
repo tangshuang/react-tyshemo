@@ -137,7 +137,7 @@ function createDispatch(name) {
 /**
  *
  * @param {object|function} define
- * @param {string} def.name the key of namespace in the whole state, for example, when name is 'some', you can get this local state by state.some or store.get('some')
+ * @param {string} def.name the key of namespace in the whole state, for example, when name is 'some', you can get this local store by state.some or store.get('some')
  * @param {object} def.state the init state of this namespace
  * @param {object} def.computed computed properties
  * @param {object} def.methods the methods to call with context this
@@ -317,7 +317,7 @@ export function subscribe(fn) {
 }
 
 /**
- * local state, create when component create, destory when component unmount
+ * local store, create when component create, destory when component unmount
  * @param {function} define store changes when deps changes
  */
 export function useLocal(define, deps = []) {
@@ -643,13 +643,10 @@ export function makeLocal(define) {
 
         const target = model || context
         const connectedProps =
-          name
-          ? {
-              [name]: target,
-              ...props,
-            }
-          : model
-            ? { model, ...props }
+          model
+          ? { model, ...props }
+          : name
+            ? { [name]: target, ...props }
             : { ...context, ...props }
 
         return <Component {...connectedProps}>{children}</Component>

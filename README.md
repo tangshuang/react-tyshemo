@@ -31,7 +31,7 @@ use({
     age: 10,
   },
 
-  // computed properties, will be cached util dependencies change
+  // computed properties, will be cached until dependencies change
   computed: {
     height() {
       return this.age * 5
@@ -88,7 +88,7 @@ It is recommended to pass a function, so that you can share the function any whe
 Use `use` in a global file, or in business components when you need.
 One namespace can only be `use` once.
 
-`user` returns `true` or `false`, if `false`, it means the same named store has been registed before, dont register again.
+`use` returns `true` or `false`, if `false`, it means the same name store has been registed before, it will not be registered again.
 
 ### connect(mapToProps: Function, mergeToProps?: Function): Function
 
@@ -150,8 +150,6 @@ const unsubscribe = subscribe(fn)
 unsubscribe()
 ```
 
-*Notice, subscribe will return all changes which contains local stores' and shared stores' changes, the difference is there is a 'local:' or 'shared:' prefix at the begin of namespace, so that you can replay the 'local' and 'shared' state changes anytime.*
-
 ## Make Functions
 
 I provide several make functions to create connect functions.
@@ -161,8 +159,8 @@ I provide several make functions to create connect functions.
 make = use + connect
 
 ```js
-const connect = make(def)
-export default connect(MyComponent)
+const wrap = make(define)
+export default wrap(MyComponent)
 ```
 
 The store is on a named prop, try it to find out.
@@ -174,7 +172,7 @@ Use vue's state management, use react's UI render. If you want to taste replacin
 ```js
 import { makeLocal } from 'react-tyshemo'
 
-// vue's template
+// replace vue's template
 function MyComponent(props) {
   const { name, age, height, updateAge } = props
   return (
@@ -210,9 +208,9 @@ function define() {
 export default makeLocal(define)(MyComponent)
 ```
 
-`makeLocal` is used to create a wrapper function (like `connect` does) for local state injection. Some times, you do not need to register state to global, you just want to make it work for local component, then you should use `makeLocal`.
+`makeLocal` is used to create a wrapper function (like `connect` does) for local store injection. Some times, you do not need to register state to global, you just want to make it work for local component, then you should use `makeLocal`.
 
-- define: function, It receive a `define` function which return the state `def`.
+- define: function, which return the state `def`.
 
 The `name` of return `def` makes sense. When you give a `name` property, the state will patch to props with namespace, if not, the state will patch to props with properties.
 
@@ -247,10 +245,10 @@ function MyComponent(props) {
 }
 ```
 
-`define` support to return a Model like `useLocal` do. However, if you want to name it, you can return an object like this:
+`define` support to return a `Model`.
 
 ```js
-import { Model } from 'tyshemo'
+import { Model } from 'tyshemo' // import from tyshemo
 
 function define() {
   class MyModel extends Model {
@@ -268,10 +266,11 @@ function define() {
       this.age ++
     }
   }
-  return {
-    name: 'some', // use a `name` property to make name works
-    model: MyModel,
-  }
+  return MyModel
+}
+
+function MyComponent(props) {
+  const { model } = props // notice, a Model instance will be passed by `model` prop
 }
 ```
 
@@ -290,7 +289,7 @@ Now `ComponentA` and `ComponentB` will share the same store during the component
 
 ## Hooks
 
-I know you are more interested in using react hooks in Functional Components. `react-tyshemo` provides several hooks.
+I know you are more interested in using react hooks in Functional Components. `react-tyshemo` provides several hook functions.
 
 ### useObserver(subscribe, unsubscribe?)
 
@@ -333,7 +332,7 @@ This hook function can not only be used with store and model, but also with any 
 
 ### useLocal(define: Function, deps = [])
 
-In sometimes, you may want to create a local state only for current component.
+In sometimes, you may want to create a local store only for current component.
 To use hook function, we provide `useLocal`.
 
 ```js
@@ -451,13 +450,11 @@ function MyComponent(props) {
 }
 ```
 
-It is NOT recommended to use `name`, this make code dispersed, you may not know where was a store registered. It is best to use `connect`.
+It is NOT recommended to use `useGlobal` directly, this make code dispersed, you may not know where was a store registered. It is best to use `connect`.
 
 ## Mutable State
 
-Tyshemo state in store is mutable, does not like Redux, you should always change the state to trigger UI rerender.
-
-*The best practice is to create methods in store def, and invoke methods in components.*
+Tyshemo state in store is mutable, does not like Redux, you do not need to create a cloned object.
 
 ```js
 const mapToProps = (stores) => {
@@ -478,7 +475,7 @@ function MyComponent(props) {
 }
 ```
 
-Here you use state properties values, you do not have the ability to change state value, you should must invoke a method to trigger change.
+Here you use state's properties, you do not have the ability to change state value, you should must invoke a method to trigger change.
 
 However, namespace state is a reactive object, so that you can change the object's properties directly:
 
@@ -493,7 +490,8 @@ function MyComponent(props) {
 ```
 
 Now, you do not need to write a `growAge` method.
-However, the best practice is to create methods, to change state in methods and to invoke methods in components, so that you know where the state changes.
+
+*However, The best practice is to create methods in store def to change state in methods, and invoke methods in components, so that you know where you change the state.*
 
 **If not reactive data**
 
@@ -565,7 +563,7 @@ const mapToProps = (stores) => {
 }
 ```
 
-In the previous code, we only used `store1` `store1` `store3`, so only these stores' states change, the component will rerender, other stores' changes will have no affect on this component.
+In the previous code, we only used `store1` `store1` `store3`, so only these stores' states change, the component will rerender, other stores' changes will have no affects on this component.
 
 ## Replay
 
@@ -599,6 +597,8 @@ Recorder.replay((item) => {
 ```
 
 However, you should notice that, if you want to send your recorded data to server side, instance of Class will bring up trouble. We do not resolve this, you should do it by your self.
+
+*Notice, subscribe will return all changes which contains local stores' and shared stores' changes, the difference is there is a 'local:' or 'shared:' prefix at the begin of namespace, so that you can replay the 'local' and 'shared' state changes anytime.*
 
 ## TySheMo
 
