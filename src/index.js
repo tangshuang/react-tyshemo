@@ -10,6 +10,7 @@ import {
   isString,
   isInheritedOf,
   isObject,
+  createRandomString,
 } from 'ts-fns'
 
 const _stores = {}
@@ -122,9 +123,20 @@ function create(def) {
   }
 }
 
+function createDispatch(name) {
+  const dispatch = ({ key, value }) => {
+    if (_observers.length) {
+      _observers.forEach((fn) => {
+        fn(name, key, value)
+      })
+    }
+  }
+  return dispatch
+}
+
 /**
  *
- * @param {object} def
+ * @param {object|function} define
  * @param {string} def.name the key of namespace in the whole state, for example, when name is 'some', you can get this local state by state.some or store.get('some')
  * @param {object} def.state the init state of this namespace
  * @param {object} def.computed computed properties
@@ -151,18 +163,18 @@ function create(def) {
  *   return <span onClick={() => updateSome('aaa')}>{myState.some}</span>
  * }
  *
- * export default connect((state, methods) => {
- *   const { myState } = state
- *   const { updateSome } = methods.myState
+ * export default connect((stores) => {
+ *   const { myState } = stores
+ *   const { some, updateSome } = myState
  *   return {
+ *     some,
  *     myState,
- *     updateSome,
  *   }
  * })(MyComponent)
  */
 export function use(define) {
   const def = isFunction(define) ? define() : define
-  const { name, state } = def
+  const { name } = def
 
   // has been registered
   if (_stores[name]) {
@@ -181,19 +193,7 @@ export function use(define) {
   _contexts[name] = $context
 
   // subscribe
-  const trigger = ({ key, value }) => {
-    if (_observers.length) {
-      _observers.forEach((fn) => {
-        fn(name, key, value)
-      })
-    }
-  }
-  $store.watch('*', trigger)
-  // trigger when a new store is used
-  trigger({
-    key: '',
-    value: state,
-  })
+  $store.watch('*', createDispatch(name), true)
 
   // onUse
   if ($hooks.onUse) {
@@ -324,6 +324,7 @@ export function useLocal(define, deps = []) {
   const [, forceUpdate] = React.useState()
   const mounted = React.useRef(false)
   const unmounted = React.useRef(false)
+  const space = React.useRef('local:' + createRandomString(8))
 
   const callHook = React.useCallback((hooks, fn) => {
     if (!hooks) {
@@ -350,6 +351,18 @@ export function useLocal(define, deps = []) {
     callHook(hooks, 'onConnect')
     callHook(hooks, 'onInit')
 
+    /**
+     * patch current store to global _stores, so that we can use `subscribe` to record the changes of this store
+     */
+
+    if (def.name) {
+      space.current = 'local:' + name
+    }
+    const name = space.current
+
+    _stores[name] = store
+    store.watch('*', createDispatch(name), true)
+
     return { context, hooks, store }
   }, deps)
 
@@ -357,6 +370,12 @@ export function useLocal(define, deps = []) {
     callHook(hooks, 'onMount')
     mounted.current = true
     return () => {
+      /**
+       * delete current store form global _stores
+       */
+      const name = space.current
+      delete _stores[name]
+
       unmounted.current = true
     }
   }, [])
@@ -588,11 +607,16 @@ export function makeLocal(define) {
           const { name } = def
           const { store, hooks, context } = create(def)
 
-          this.$$ = { name, store, hooks, context }
-
           callHook(hooks, 'onUse')
           callHook(hooks, 'onConnect')
           callHook(hooks, 'onInit')
+
+          // patch to global stores
+          const space = 'local:' + (name ? name : createRandomString(8))
+          _stores[space] = store
+          store.watch('*', createDispatch(space), true)
+
+          this.$$ = { name, store, hooks, context, space }
         }
       }
       componentDidMount() {
@@ -606,10 +630,11 @@ export function makeLocal(define) {
         callHook(hooks, 'onUpdate')
       }
       componentWillUnmount() {
-        const { model, store, hooks } = this.$$
+        const { model, store, hooks, space } = this.$$
         const target = model || store
         target.unwatch('*', this.update)
         callHook(hooks, 'onUnmount')
+        delete _stores[space]
         this.$$ = null
       }
       render() {
@@ -647,6 +672,8 @@ export function makeShared(define) {
     model: null,
   }
 
+  let space = 'shared:' + createRandomString(8)
+
   const free = () => {
     Object.assign(memo, {
       store: null,
@@ -654,6 +681,7 @@ export function makeShared(define) {
       context: null,
       model: null,
     })
+    delete _stores[space]
   }
 
   let count = 0
@@ -699,6 +727,17 @@ export function makeShared(define) {
             })
             callHook(hooks, 'onUse')
             callHook(hooks, 'onConnect')
+
+            /**
+             * patch current store to global _stores, so that we can use `subscribe` to record the changes of this store
+             */
+
+            if (name) {
+              space = 'shared:' + name
+            }
+
+            _stores[space] = store
+            store.watch('*', createDispatch(space), true)
           }
         }
 

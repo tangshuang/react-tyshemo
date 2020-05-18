@@ -1,6 +1,7 @@
 # React-Tyshemo
 
-A react state managemenet controller drived by tyshemo.
+A react state managemenet which is drived with [tyshemo](https://github.com/tangshuang/tyshemo) Store.
+Enjoy global shared mutable state management amoung components, without any complext reducer codes, without
 
 ## Install
 
@@ -147,6 +148,8 @@ const unsubscribe = subscribe(fn)
 /// ...
 unsubscribe()
 ```
+
+*Notice, subscribe will return all changes which contains local stores' and shared stores' changes, the difference is there is a 'local:' or 'shared:' prefix at the begin of namespace, so that you can replay the 'local' and 'shared' state changes anytime.*
 
 ## Make Functions
 
