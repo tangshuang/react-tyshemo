@@ -1,7 +1,8 @@
 # React-Tyshemo
 
 A react state managemenet which is drived with [tyshemo](https://github.com/tangshuang/tyshemo) Store.
-Enjoy global shared mutable state management amoung components, without any complext reducer codes, without
+
+Enjoy global shared mutable state management amoung components, without any complex reducer codes, without a force Provider component, without messy store files management, just code as want your think directly.
 
 ## Install
 
