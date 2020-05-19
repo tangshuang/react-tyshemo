@@ -330,16 +330,16 @@ It will subscribe and unsubscribe automaticly.
 
 This hook function can not only be used with store and model, but also with any reactive system.
 
-### useLocal(define: Function, deps = [])
+### useLocalStore(define: Function, deps = [])
 
 In sometimes, you may want to create a local store only for current component.
-To use hook function, we provide `useLocal`.
+To use hook function, we provide `useLocalStore`.
 
 ```js
-import { useLocal } from 'react-tyshemo'
+import { useLocalStore } from 'react-tyshemo'
 
 export default function MyComponent() {
-  const store = useLocal(() => {
+  const store = useLocalStore(() => {
     return {
       // name is not needed
       state: {
@@ -366,11 +366,11 @@ export default function MyComponent() {
 In sometimes, you do need a Model, not a store, you should do like this:
 
 ```js
-import { useLocal } from 'react-tyshemo'
+import { useLocalStore } from 'react-tyshemo'
 import { Model } from 'tyshemo'
 
 export default function MyComponent() {
-  const model = useLocal(() => {
+  const model = useLocalStore(() => {
     class MyModel extends Model {
       static name = {
         default: 'tomy',
@@ -397,7 +397,7 @@ export default function MyComponent() {
 }
 ```
 
-### useGlobal(define|def|name)
+### useGlobalStore(define|def|name)
 
 React hook function to use a store which is registered globally.
 
@@ -419,7 +419,7 @@ function define() {
 }
 
 function MyComponent(props) {
-  const store = useGlobal(define)
+  const store = useGlobalStore(define)
 }
 ```
 
@@ -435,7 +435,7 @@ const def = {
 }
 
 function MyComponent(props) {
-  const store = useGlobal(def)
+  const store = useGlobalStore(def)
 }
 ```
 
@@ -446,11 +446,11 @@ use({
 })
 
 function MyComponent(props) {
-  const store = useGlobal('my-store') // if 'my-store' is not registed by `use`, you will get `undefined`
+  const store = useGlobalStore('my-store') // if 'my-store' is not registed by `use`, you will get `undefined`
 }
 ```
 
-It is NOT recommended to use `useGlobal` directly, this make code dispersed, you may not know where was a store registered. It is best to use `connect`.
+It is NOT recommended to use `useGlobalStore` directly, this make code dispersed, you may not know where was a store registered. It is best to use `connect`.
 
 ## Mutable State
 
