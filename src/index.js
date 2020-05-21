@@ -106,7 +106,8 @@ function create(def) {
    * propagation of models
    */
   $store.observe(
-    v => isInstanceOf(v, Model),
+    // the submodel of a parent model will propagate to the parent model, so we do not need to observe them
+    v => isInstanceOf(v, Model) && !v.$parent,
     v => dispatch => v.watch('*', dispatch, true),
     v => dispatch => v.unwatch('*', dispatch),
   )
