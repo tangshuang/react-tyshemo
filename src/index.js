@@ -39,6 +39,8 @@ function create(def) {
     fn = isFunction(key) ? key : fn
     key = isString(key) ? key : ''
 
+    const { data, state } = store
+
     const prev = parse(data, key)
     const invalid = parse(state, key)
 
@@ -46,7 +48,6 @@ function create(def) {
       fn()
     }
 
-    const { data, state } = store
     const value = parse(data, key)
     const next = value
     const active = parse(state, key)
