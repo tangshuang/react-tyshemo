@@ -78,7 +78,6 @@ function create(def) {
     $store = new Store(state)
 
     const $state = $store.state
-    const $data = $store.data
 
     // computed
     each(computed, (compute, key) => {
@@ -129,7 +128,7 @@ function create(def) {
       },
     })
     // patch $methods
-    $methods.dispatch = createDispatch($state, $data)
+    $methods.dispatch = createDispatch($store)
     each(methods, (fn, key) => {
       $methods[key] = fn.bind($context)
     })

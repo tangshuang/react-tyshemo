@@ -1,1 +1,4 @@
 .babelrc
+_demo
+.cache
+dist/

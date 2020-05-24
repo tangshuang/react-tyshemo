@@ -4,6 +4,7 @@
   "description": "A react state manager drived by tyshemo.",
   "main": "index.js",
   "scripts": {
+    "demo": "parcel _demo/index.html",
     "build": "babel src/index.js -o index.js"
   },
   "repository": {
@@ -27,7 +28,10 @@
     "@babel/core": "^7.9.0",
     "@babel/plugin-proposal-class-properties": "^7.8.3",
     "@babel/preset-env": "^7.9.5",
-    "@babel/preset-react": "^7.9.4"
+    "@babel/preset-react": "^7.9.4",
+    "parcel-bundler": "^1.12.4",
+    "react": "^16.13.1",
+    "react-dom": "^16.13.1"
   },
   "dependencies": {
     "ts-fns": "^6.4.3",
