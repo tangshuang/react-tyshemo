@@ -11,7 +11,10 @@ import {
   isInheritedOf,
   isObject,
   createRandomString,
+  define,
 } from 'ts-fns'
+
+export { Model }
 
 const _stores = {}
 const _hooks = {}
@@ -20,97 +23,129 @@ const _contexts = {}
 const _observers = []
 
 function create(def) {
-  const { state, computed = {}, methods = {}, hooks = {}, watch = {} } = def
+  const {
+    name,
+    model,
+    state,
+    computed = {},
+    methods = {},
+    hooks = {},
+    watch = {},
+  } = def
 
-  const $store = new Store(state)
-  const $state = $store.state
-  const $data = $store.data
+  let $store, $model, $context
 
-  // computed
-  each(computed, (compute, key) => {
-    $store.define(key, compute)
-  })
-
-  // methods
-  const $methods = {}
-  const $context = new Proxy({}, {
-    get(_, key) {
-      if ($methods[key]) {
-        return $methods[key]
-      }
-      else {
-        return $state[key]
-      }
-    },
-    set(_, key, value) {
-      if ($methods[key]) {
-        return false
-      }
-      else {
-        $state[key] = value
-        return true
-      }
-    },
-    deleteProperty(_, key) {
-      if (key in $state) {
-        delete $state[key]
-        return true
-      }
-      else {
-        return false
-      }
-    },
-    ownKeys() {
-      const stateKeys = Object.keys($state)
-      const methodKeys = Object.keys($methods)
-      return [...stateKeys, ...methodKeys]
-    },
-    getOwnPropertyDescriptor(_, key) {
-      const methodKeys = Object.keys($methods)
-      const isMethod = methodKeys.includes(key)
-      return {
-        enumerable: !isMethod,
-        configurable: true,
-      }
-    },
-  })
-
-  $methods.dispatch = (key, fn) => {
+  const createDispatch = (store) => (key, fn) => {
     fn = isFunction(key) ? key : fn
     key = isString(key) ? key : ''
+
+    const prev = parse(data, key)
+    const invalid = parse(state, key)
 
     if (fn) {
       fn()
     }
 
-    const value = parse($data, key)
-    const state = parse($state, key)
-    $store.dispatch(key, {
+    const { data, state } = store
+    const value = parse(data, key)
+    const next = value
+    const active = parse(state, key)
+    store.dispatch(key, {
       value,
-      next: state,
-      prev: state,
+      next,
+      prev,
+      active,
+      invalid,
     }, true)
   }
 
-  each(methods, (fn, key) => {
-    $methods[key] = fn.bind($context)
-  })
+  /**
+   * if model is return, state, computed, methods will not work
+   * model should be a class extended from Model
+   *
+   */
+  if (model && isInheritedOf(model, Model)) {
+    $model = new model()
+    $store = $model.$store
+    $context = $model
+
+    define($model, 'dispatch', {
+      value: createDispatch($store)
+    })
+  }
+  else if (state) {
+    $store = new Store(state)
+
+    const $state = $store.state
+    const $data = $store.data
+
+    // computed
+    each(computed, (compute, key) => {
+      $store.define(key, compute)
+    })
+
+    // context
+    const $methods = {}
+    $context = new Proxy({}, {
+      get(_, key) {
+        if ($methods[key]) {
+          return $methods[key]
+        }
+        else {
+          return $state[key]
+        }
+      },
+      set(_, key, value) {
+        if ($methods[key]) {
+          return false
+        }
+        else {
+          $state[key] = value
+          return true
+        }
+      },
+      deleteProperty(_, key) {
+        if (key in $state) {
+          delete $state[key]
+          return true
+        }
+        else {
+          return false
+        }
+      },
+      ownKeys() {
+        const stateKeys = Object.keys($state)
+        const methodKeys = Object.keys($methods)
+        return [...stateKeys, ...methodKeys]
+      },
+      getOwnPropertyDescriptor(_, key) {
+        const methodKeys = Object.keys($methods)
+        const isMethod = methodKeys.includes(key)
+        return {
+          enumerable: !isMethod,
+          configurable: true,
+        }
+      },
+    })
+    // patch $methods
+    $methods.dispatch = createDispatch($state, $data)
+    each(methods, (fn, key) => {
+      $methods[key] = fn.bind($context)
+    })
+
+    /**
+     * propagation of models
+     */
+    $store.observe(
+      // the submodel of a parent model will propagate to the parent model, so we do not need to observe them
+      v => isInstanceOf(v, Model) && !v.$parent,
+      v => dispatch => v.watch('*', dispatch, true),
+      v => dispatch => v.unwatch('*', dispatch),
+    )
+  }
 
   // hooks
-  const $hooks = {}
-  each(hooks, (fn, key) => {
-    $hooks[key] = fn.bind($context)
-  })
-
-  /**
-   * propagation of models
-   */
-  $store.observe(
-    // the submodel of a parent model will propagate to the parent model, so we do not need to observe them
-    v => isInstanceOf(v, Model) && !v.$parent,
-    v => dispatch => v.watch('*', dispatch, true),
-    v => dispatch => v.unwatch('*', dispatch),
-  )
+  const $hooks = map(hooks, fn => fn.bind($context))
 
   // watch
   each(watch, (fn, key) => {
@@ -118,6 +153,8 @@ function create(def) {
   })
 
   return {
+    name,
+    model: $model,
     store: $store,
     hooks: $hooks,
     context: $context,
@@ -182,23 +219,19 @@ export function use(define) {
     return false
   }
 
-  const {
-    store: $store,
-    hooks: $hooks,
-    context: $context,
-  } = create(def)
+  const { store, hooks, context } = create(def)
 
   // register
-  _stores[name] = $store
-  _hooks[name] = $hooks
-  _contexts[name] = $context
+  _stores[name] = store
+  _hooks[name] = hooks
+  _contexts[name] = context
 
   // subscribe
-  $store.watch('*', createDispatch(name), true)
+  store.watch('*', createDispatch(name), true)
 
   // onUse
-  if ($hooks.onUse) {
-    $hooks.onUse()
+  if (hooks.onUse) {
+    hooks.onUse()
   }
 
   return true
@@ -321,11 +354,11 @@ export function subscribe(fn) {
  * local store, create when component create, destory when component unmount
  * @param {function} define store changes when deps changes
  */
-export function useLocalStore(define, deps = []) {
-  const [, forceUpdate] = React.useState()
+export function useLocal(define, deps = []) {
+  const [, update] = React.useState()
   const mounted = React.useRef(false)
   const unmounted = React.useRef(false)
-  const space = React.useRef('local:' + createRandomString(8))
+  const namespace = React.useRef('local:' + createRandomString(8))
 
   const callHook = React.useCallback((hooks, fn) => {
     if (!hooks) {
@@ -338,12 +371,17 @@ export function useLocalStore(define, deps = []) {
     }
   }, [])
 
-  const { context, hooks, store, model } = React.useMemo(() => {
-    const def = define()
+  const forceUpdate = React.useCallback(() => {
+    if (!unmounted.current) {
+      update({})
+    }
+  }, [])
+
+  const { context, hooks, store } = React.useMemo(() => {
+    let def = define()
 
     if (isInheritedOf(def, Model)) {
-      const model = new def()
-      return { model }
+      def = { model: def }
     }
 
     const { context, hooks, store } = create(def)
@@ -356,66 +394,52 @@ export function useLocalStore(define, deps = []) {
      * patch current store to global _stores, so that we can use `subscribe` to record the changes of this store
      */
 
-    if (def.name) {
-      space.current = 'local:' + name
-    }
-    const name = space.current
-
-    _stores[name] = store
-    store.watch('*', createDispatch(name), true)
+    const space = namespace.current
+    _stores[space] = store
+    store.watch('*', createDispatch(space), true)
 
     return { context, hooks, store }
   }, deps)
 
+  // mount
+  // unmount
   React.useEffect(() => {
-    callHook(hooks, 'onMount')
     mounted.current = true
-    return () => {
-      /**
-       * delete current store form global _stores
-       */
-      const name = space.current
-      delete _stores[name]
+    callHook(hooks, 'onMount')
 
+    return () => {
+      const space = namespace.current
+      delete _stores[space]
       unmounted.current = true
+      callHook(hooks, 'onUnmount')
     }
   }, [])
 
+  // watch
   React.useEffect(() => {
-    const update = () => {
-      if (!unmounted.current) {
-        forceUpdate({})
-      }
-    }
+    store.watch('*', forceUpdate, true)
 
-    const target = model || store
-
-    target.watch('*', update, true)
     return () => {
-      if (unmounted.current) {
-        callHook(hooks, 'onUnmount')
-      }
-
-      target.unwatch('*', update, true)
+      store.unwatch('*', forceUpdate, true)
     }
-  }, [model, store, hooks])
+  }, [store])
 
+  // update
   React.useEffect(() => {
     if (mounted.current) {
       callHook(hooks, 'onUpdate')
     }
-  }, [hooks])
+  })
 
-  const target = model || context
-  return target
+  return context
 }
 
 /**
  * use hook
  * @param {*} name
  */
-export function useGlobalStore(name) {
-  const [, forceUpdate] = React.useState()
+export function useGlobal(name) {
+  const [, update] = React.useState()
   const mounted = React.useRef(false)
   const unmounted = React.useRef(false)
 
@@ -427,6 +451,12 @@ export function useGlobalStore(name) {
     const hook = hooks[fn]
     if (isFunction(hook)) {
       hook()
+    }
+  }, [])
+
+  const forceUpdate = React.useCallback(() => {
+    if (!unmounted.current) {
+      update({})
     }
   }, [])
 
@@ -454,42 +484,40 @@ export function useGlobalStore(name) {
     callHook(hooks, 'onInit')
 
     return { context, hooks, store }
-  })
+  }, [])
 
+  // mount
+  // unmount
   React.useEffect(() => {
-    callHook(hooks, 'onMount')
     mounted.current = true
+    callHook(hooks, 'onMount')
+
     return () => {
       unmounted.current = true
+      callHook(hooks, 'onUnmount')
     }
   }, [])
 
+  // watch
   React.useEffect(() => {
+    // the passed name store may not exist
     if (!store) {
       return
     }
 
-    const update = () => {
-      if (!unmounted.current) {
-        forceUpdate({})
-      }
-    }
+    store.watch('*', forceUpdate, true)
 
-    store.watch('*', update, true)
     return () => {
-      if (unmounted.current) {
-        callHook(hooks, 'onUnmount')
-      }
-
       store.unwatch('*', update, true)
     }
-  }, [store, hooks])
+  }, [store])
 
+  // update
   React.useEffect(() => {
     if (mounted.current) {
       callHook(hooks, 'onUpdate')
     }
-  }, [hooks])
+  })
 
   return context
 }
@@ -499,12 +527,15 @@ export function useGlobalStore(name) {
  * @param {*} subscribe
  * @param {*} unsubscribe
  */
-export function useObserver(subscribe, unsubscribe) {
+export function useObserver(subscribe, unsubscribe, deps = []) {
   // subscribe store or model directly
   if (isInstanceOf(subscribe, Store) || isInstanceOf(subscribe, Model)) {
+    const reactive = subscribe
+    const dps = unsubscribe || []
     useObserver(
-      dispatch => subscribe.watch('*', dispatch, true),
-      dispatch => subscribe.unwatch('*', dispatch),
+      dispatch => reactive.watch('*', dispatch, true),
+      dispatch => reactive.unwatch('*', dispatch),
+      dps,
     )
     return
   }
@@ -521,7 +552,7 @@ export function useObserver(subscribe, unsubscribe) {
         unsubscribe(forceUpdate)
       }
     }
-  }, [])
+  }, deps)
 }
 
 /**
@@ -542,13 +573,34 @@ export function useObserver(subscribe, unsubscribe) {
  *
  * export default connect(MyComponent)
  */
-export function make(define) {
+export function make(define, merge) {
   const def = isFunction(define) ? define() : define
   const { name } = def
+
+  if (!name) {
+    def.name = createRandomString(8)
+  }
   use(def)
-  return connect((contexts) => ({
-    [name]: contexts[name],
-  }))
+
+  return connect(
+    // dep collect, map
+    (stores) => ({
+      store: stores[def.name],
+    }),
+    // merge props
+    (mappedProps, ownProps) => {
+      const { store } = mappedProps
+      if (isFunction(merge)) {
+        return merge(store, ownProps)
+      }
+      else if (name) {
+        return { [name]: store, ...ownProps }
+      }
+      else {
+        return { ...store, ...ownProps }
+      }
+    },
+  )
 }
 
 /**
@@ -575,7 +627,7 @@ export function make(define) {
  *
  * export default connect(MyComponent)
  */
-export function makeLocal(define) {
+export function makeLocal(define, merge) {
   return function(Component) {
     const callHook = (hooks, fn) => {
       if (!hooks) {
@@ -599,31 +651,22 @@ export function makeLocal(define) {
       }
       init() {
         const def = define()
+        const { store, hooks, context, name } = create(def)
 
-        if (isInheritedOf(def, Model)) {
-          const model = new def()
-          this.$$ = { model }
-        }
-        else {
-          const { name } = def
-          const { store, hooks, context } = create(def)
+        callHook(hooks, 'onUse')
+        callHook(hooks, 'onConnect')
+        callHook(hooks, 'onInit')
 
-          callHook(hooks, 'onUse')
-          callHook(hooks, 'onConnect')
-          callHook(hooks, 'onInit')
+        // patch to global stores
+        const space = 'local:' + createRandomString(8)
+        _stores[space] = store
+        store.watch('*', createDispatch(space), true)
 
-          // patch to global stores
-          const space = 'local:' + (name ? name : createRandomString(8))
-          _stores[space] = store
-          store.watch('*', createDispatch(space), true)
-
-          this.$$ = { name, store, hooks, context, space }
-        }
+        this.$$ = { name, store, hooks, context, space }
       }
       componentDidMount() {
-        const { model, store, hooks } = this.$$
-        const target = model || store
-        target.watch('*', this.update, true)
+        const { store, hooks } = this.$$
+        store.watch('*', this.update, true)
         callHook(hooks, 'onMount')
       }
       componentDidUpdate() {
@@ -631,26 +674,28 @@ export function makeLocal(define) {
         callHook(hooks, 'onUpdate')
       }
       componentWillUnmount() {
-        const { model, store, hooks, space } = this.$$
-        const target = model || store
-        target.unwatch('*', this.update)
+        const { store, hooks, space } = this.$$
+        store.unwatch('*', this.update)
         callHook(hooks, 'onUnmount')
         delete _stores[space]
         this.$$ = null
       }
       render() {
-        const { name, context, model } = this.$$
+        const { name, context } = this.$$
         const { children, ...props } = this.props
 
-        const target = model || context
-        const connectedProps =
-          model
-          ? { model, ...props }
-          : name
-            ? { [name]: target, ...props }
-            : { ...context, ...props }
+        let mergedProps = null
+        if (isFunction(merge)) {
+          mergedProps = merge(context, props)
+        }
+        else if (name) {
+          mergedProps = { [name]: context, ...props }
+        }
+        else {
+          mergedProps = { ...context, ...props }
+        }
 
-        return <Component {...connectedProps}>{children}</Component>
+        return <Component {...mergedProps}>{children}</Component>
       }
     }
 
@@ -662,25 +707,22 @@ export function makeLocal(define) {
  *
  * @param {function} define
  */
-export function makeShared(define) {
-  const memo = {
-    store: null,
-    hooks: null,
-    context: null,
-    model: null,
-  }
-
-  let space = 'shared:' + createRandomString(8)
+export function makeShared(define, merge) {
+  const memo = {}
+  const space = 'shared:' + createRandomString(8)
 
   const free = () => {
     Object.assign(memo, {
       store: null,
       hooks: null,
       context: null,
-      model: null,
+      name: '',
     })
     delete _stores[space]
   }
+
+  // init
+  free()
 
   let count = 0
 
@@ -707,36 +749,24 @@ export function makeShared(define) {
       }
       init() {
         // build def when not exist
-        if (!memo.store && !memo.hooks && !memo.context && !memo.model) {
+        if (!memo.store && !memo.hooks && !memo.context) {
           const def = define()
+          const { store, hooks, context, name } = create(def)
+          Object.assign(memo, {
+            store,
+            hooks,
+            context,
+            name,
+          })
+          callHook(hooks, 'onUse')
+          callHook(hooks, 'onConnect')
 
-          if (isInheritedOf(def, Model)) {
-            const model = new def()
-            Object.assign(memo, { model })
-          }
-          else {
-            const { name } = def
-            const { store, hooks, context } = create(def)
-            Object.assign(memo, {
-              store,
-              hooks,
-              context,
-              name,
-            })
-            callHook(hooks, 'onUse')
-            callHook(hooks, 'onConnect')
+          /**
+           * patch current store to global _stores, so that we can use `subscribe` to record the changes of this store
+           */
 
-            /**
-             * patch current store to global _stores, so that we can use `subscribe` to record the changes of this store
-             */
-
-            if (name) {
-              space = 'shared:' + name
-            }
-
-            _stores[space] = store
-            store.watch('*', createDispatch(space), true)
-          }
+          _stores[space] = store
+          store.watch('*', createDispatch(space), true)
         }
 
         callHook(memo.hooks, 'onInit')
@@ -744,18 +774,16 @@ export function makeShared(define) {
         count ++
       }
       componentDidMount() {
-        const { model, store, hooks } = memo
-        const target = model || store
-        target.watch('*', this.update, true)
+        const { store, hooks } = memo
+        store.watch('*', this.update, true)
         callHook(hooks, 'onMount')
       }
       componentDidUpdate() {
         callHook(memo.hooks, 'onUpdate')
       }
       componentWillUnmount() {
-        const { model, store, hooks } = memo
-        const target = model || store
-        target.unwatch('*', this.update)
+        const { store, hooks } = memo
+        store.unwatch('*', this.update)
         callHook(hooks, 'onUnmount')
 
         count --
@@ -772,21 +800,21 @@ export function makeShared(define) {
         }, 100)
       }
       render() {
-        const { name, context, model } = memo
+        const { name, context } = memo
         const { children, ...props } = this.props
 
-        const target = model || context
-        const connectedProps =
-          name
-          ? {
-              [name]: target,
-              ...props,
-            }
-          : model
-            ? { model, ...props }
-            : { ...context, ...props }
+        let mergedProps = null
+        if (isFunction(merge)) {
+          mergedProps = merge(context, props)
+        }
+        else if (name) {
+          mergedProps = { [name]: context, ...props }
+        }
+        else {
+          mergedProps = { ...context, ...props }
+        }
 
-        return <Component {...connectedProps}>{children}</Component>
+        return <Component {...mergedProps}>{children}</Component>
       }
     }
 
