@@ -34,8 +34,8 @@
     "react-dom": "^16.13.1"
   },
   "dependencies": {
-    "ts-fns": "^6.4.3",
-    "tyshemo": "^6.4.0"
+    "ts-fns": "^6.4.4",
+    "tyshemo": "^7.0.1"
   },
   "peerDependencies": {
     "react": "^16.13.1"

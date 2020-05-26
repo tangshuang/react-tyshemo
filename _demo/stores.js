@@ -1,3 +1,5 @@
+import { Model } from "../src/index.js";
+
 // create a class which is not reactive when properties change
 class Book {
   price = 12;
@@ -43,4 +45,49 @@ export function one() {
       }
     }
   };
+}
+
+export function some() {
+  class SomeModel extends Model {
+    static name = {
+      default: 'tomy',
+    }
+    static age = {
+      default: 10,
+    }
+    static sex = {
+      default: 'M',
+    }
+    static height = {
+      default: 0,
+      compute() {
+        return this.age * 5
+      },
+    }
+    static book = {
+      default: () => new Book(),
+    }
+
+    // make sure
+    static html = {
+      default: ''
+    }
+
+    changeSex(sex) {
+      this.sex = sex;
+    }
+    updateBook(data) {
+      Object.assign(this.book, data);
+      this.dispatch("book");
+    }
+
+    onInit() {
+      fetch("/")
+        .then(res => res.text())
+        .then(text => {
+          this.html = text;
+        });
+    }
+  }
+  return SomeModel
 }

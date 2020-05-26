@@ -1,5 +1,5 @@
 import React from 'react'
-import { Store, Model } from 'tyshemo'
+import { Store, Model, TracedModel } from 'tyshemo'
 import {
   each,
   filter,
@@ -14,7 +14,7 @@ import {
   define,
 } from 'ts-fns'
 
-export { Model }
+export { Model, TracedModel }
 
 const _stores = {}
 const _hooks = {}
@@ -71,7 +71,7 @@ function create(def) {
     $context = $model
 
     define($model, 'dispatch', {
-      value: createDispatch($store)
+      value: createDispatch($store),
     })
   }
   else if (state) {
@@ -128,7 +128,10 @@ function create(def) {
       },
     })
     // patch $methods
-    $methods.dispatch = createDispatch($store)
+    define($methods, 'dispatch', {
+      value: createDispatch($store),
+      enumerable: true,
+    })
     each(methods, (fn, key) => {
       $methods[key] = fn.bind($context)
     })
