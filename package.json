@@ -4,7 +4,7 @@
   "description": "A react state manager drived by tyshemo.",
   "main": "index.js",
   "scripts": {
-    "demo": "parcel _demo/index.html",
+    "demo": "parcel _demo/index.html --out-dir=.cache/.dist",
     "build": "babel src/index.js -o index.js"
   },
   "repository": {
