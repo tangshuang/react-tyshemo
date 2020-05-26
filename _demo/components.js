@@ -11,6 +11,9 @@ export function MyComponent(props) {
     sex,
     html,
     book,
+
+    changeSex,
+    updateBook,
   } = one;
 
   // notice, we should invoke methods of one by use one.change, or the `this` in methods may not point to `one`
@@ -25,13 +28,13 @@ export function MyComponent(props) {
         <button type="button" onClick={() => one.age++}>
           grow age
         </button>
-        <button type="button" onClick={() => one.changeSex(!sex)}>
+        <button type="button" onClick={() => changeSex(!sex)}>
           change sex
         </button>
         <button
           type="button"
           onClick={() =>
-            one.updateBook({ price: (Math.random() * 100).toFixed(2) })
+            updateBook({ price: (Math.random() * 100).toFixed(2) })
           }
         >
           update book price

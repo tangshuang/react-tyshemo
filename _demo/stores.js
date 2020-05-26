@@ -81,6 +81,10 @@ export function some() {
       this.dispatch("book");
     }
 
+    [Symbol('dict')]() {
+      return 'dict'
+    }
+
     onInit() {
       fetch("/")
         .then(res => res.text())

@@ -73,6 +73,27 @@ function create(def) {
     define($model, 'dispatch', {
       value: createDispatch($store),
     })
+
+    // bind methods with model
+    // make it enumerable on instance so that we can use descontruction
+    const protos = model.prototype
+    const keys = Object.getOwnPropertyNames(protos)
+    keys.forEach((key) => {
+      const proto = protos[key]
+      if (!isFunction(proto)) {
+        return
+      }
+      if (key === 'constructor' || key === 'init') {
+        return
+      }
+      if (key.indexOf('on') === 0) {
+        return
+      }
+      define($model, key, {
+        value: proto.bind($model),
+        enumerable: true,
+      })
+    })
   }
   else if (state) {
     $store = new Store(state)
@@ -130,7 +151,6 @@ function create(def) {
     // patch $methods
     define($methods, 'dispatch', {
       value: createDispatch($store),
-      enumerable: true,
     })
     each(methods, (fn, key) => {
       $methods[key] = fn.bind($context)
