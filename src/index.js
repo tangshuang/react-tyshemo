@@ -554,11 +554,10 @@ export function useObserver(subscribe, unsubscribe, deps = []) {
   // subscribe store or model directly
   if (isInstanceOf(subscribe, Store) || isInstanceOf(subscribe, Model)) {
     const reactive = subscribe
-    const dps = unsubscribe || []
     useObserver(
       dispatch => reactive.watch('*', dispatch, true),
       dispatch => reactive.unwatch('*', dispatch),
-      dps,
+      [reactive],
     )
     return
   }
