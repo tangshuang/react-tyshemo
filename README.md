@@ -7,8 +7,10 @@ Enjoy global shared mutable state management amoung components, without any comp
 ## Install
 
 ```
-npm i react-tyshemo
+npm i react-tyshemo tyshemo
 ```
+
+Notice, `tyshemo` is a peerDependence, you should must install it at the same time.
 
 ## API
 
@@ -116,7 +118,8 @@ else {
 And you can return a Model in define function:
 
 ```js
-import { Model, use } from 'react-tyshemo'
+import { Model } from 'tyshemo'
+import { use } from 'react-tyshemo'
 
 function define() {
   class SomeModel extends Model {

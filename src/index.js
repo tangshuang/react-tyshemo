@@ -1,5 +1,5 @@
 import React from 'react'
-import { Store, Model, TraceModel } from 'tyshemo'
+import { Store, Model } from 'tyshemo'
 import {
   each,
   filter,
@@ -13,8 +13,6 @@ import {
   createRandomString,
   define,
 } from 'ts-fns'
-
-export { Model, TraceModel }
 
 const _stores = {}
 const _hooks = {}
