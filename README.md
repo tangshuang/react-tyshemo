@@ -718,6 +718,23 @@ However, you should notice that, if you want to send your recorded data to serve
 
 *Notice, subscribe will return all changes which contains local stores' and shared stores' changes, the difference is there is a 'local:' or 'shared:' prefix at the begin of namespace, so that you can replay the 'local' and 'shared' state changes anytime.*
 
+## react-tyshemo-form
+
+React-tyshemo-form is a form library for react, it is very easy to manage form status by using tyshemo Model.
+You can use it easy with react-tyshemo:
+
+```js
+import { Field } from 'react-tyshemo/form'
+```
+
+Or use seperate library.
+
+```
+npm i react-tyshemo-form
+```
+
+Read more from [here](https://github.com/tangshuang/react-tyshemo-form).
+
 ## TySheMo
 
 > Tyshemo is a javascript runtime data type checking system and morden reactive state management model.

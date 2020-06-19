@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "demo": "parcel _demo/index.html --out-dir=.cache/.dist",
-    "build": "babel src/index.js -o index.js"
+    "build:main": "babel src/index.js -o index.js",
+    "build:form": "babel src/form.js -o form.js",
+    "build": "npm run build:main && npm run build:form"
   },
   "repository": {
     "type": "git",
@@ -32,7 +34,7 @@
     "parcel-bundler": "^1.12.4",
     "react": "^16.13.1",
     "react-dom": "^16.13.1",
-    "tyshemo": "^7.2.0"
+    "tyshemo": "^8.1.0"
   },
   "dependencies": {
     "ts-fns": "^6.4.4"
