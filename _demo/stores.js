@@ -1,4 +1,4 @@
-import { Model } from "../src/index.js";
+import { Model } from "tyshemo";
 
 // create a class which is not reactive when properties change
 class Book {
