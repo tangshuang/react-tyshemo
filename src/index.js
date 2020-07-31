@@ -202,6 +202,7 @@ function createDispatch(name) {
  * @param {object} def.methods the methods to call with context this
  * @param {object} def.hooks the functions to do when on certain moment
  * @param {object} def.watch the functions to react when state change
+ * @param {function} [fallback] when the name is existing, fallback function will be invoked
  * @example
  * import { use, connect } from 'tyshemo-react'
  *
@@ -231,12 +232,14 @@ function createDispatch(name) {
  *   }
  * })(MyComponent)
  */
-export function use(define) {
+export function use(define, fallback) {
   const def = isFunction(define) ? define() : define
   const { name } = def
 
   // has been registered
   if (_stores[name]) {
+    const names = Object.keys(_stores)
+    isFunction(fallback) && fallback(names)
     return false
   }
 
