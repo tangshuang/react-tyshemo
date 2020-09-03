@@ -7,10 +7,8 @@ Enjoy global shared mutable state management amoung components, without any comp
 ## Install
 
 ```
-npm i react-tyshemo tyshemo
+npm i react-tyshemo
 ```
-
-Notice, `tyshemo` is a peerDependence, you should must install it at the same time.
 
 ## API
 
@@ -18,7 +16,7 @@ Notice, `tyshemo` is a peerDependence, you should must install it at the same ti
 import { use, connect } from 'react-tyshemo'
 ```
 
-### use(define: object|Function): boolean
+### use(define: object|function, fallback?: function): string|symbol
 
 To register a namespace store in global scope.
 
@@ -33,7 +31,7 @@ const define = {
   // should be unique, same namespace will only be registered at the first time
   name: 'namespace',
 
-  // default state
+  // required, default state
   state: {
     name: 'xxx',
     age: 10,
@@ -96,6 +94,7 @@ If you pass a function, it should return an object whose structure is the same a
 function define() {
   return {
     // ... some structure
+    // if name is not returned, the function's name will be used as namespace
   }
 }
 ```
@@ -104,15 +103,11 @@ It is recommended to pass a function, so that you can share the function any whe
 
 One namespace can only be `use` once. So, it doesn't matter whether use `use` in a global file or in business components when you need, the same namespace will be used only once.
 
-`use` returns `true` or `false`, if `false`, it means the same name store has been registed before, it will not be registered again.
+`use` returns registered name, so that you can use the name for next steps.
 
 ```js
-if (use(define)) {
-  console.log('registed, onUse hook has been run')
-}
-else {
-  console.log('not work')
-}
+const name = use(define)
+const state = getState()[name]
 ```
 
 And you can return a Model in define function:
@@ -121,7 +116,7 @@ And you can return a Model in define function:
 import { Model } from 'tyshemo'
 import { use } from 'react-tyshemo'
 
-function define() {
+function some() {
   class SomeModel extends Model {
     static name = {
       default: 'luni',
@@ -130,21 +125,21 @@ function define() {
       default: 10,
     }
   }
-
-  return {
-    name: 'some',
-    model: SomeModel, // notice `model` property
-  }
+  return SomeModel
 }
 
-use(define)
+const name = use(some) // name === 'some'
 ```
 
 This `Model` is the same as [`Model` in tyshemo](https://tyshemo.js.org/#/model).
-If a `model` property exists on return def object, `state` `computed` and `methods` of def object will not work.
+
 However, model mode is different from store mode, especially when invoke `connect`, you should read the following parts and explore by yourself.
 
-### connect(mapToProps: Function, mergeToProps?: Function): Function
+**fallback**
+
+When you use a existing store/model, fallback will be invoked, you passed define will not be executed and the old one will be return (without override).
+
+### connect(mapToProps: function, mergeToProps?: function): function
 
 Connect a component with registered stores.
 
@@ -162,13 +157,19 @@ function MyComponent(props) {
 }
 
 /**
- * @param {object} stores the whole state, each context owns a state and methods of the namespace
+ * @param {object} contexts all contexts (stores and models) which are registered in global,
+ * if a context is from a store, it will combine state and methods together.
  */
-const mapToProps = (stores) => {
+const mapToProps = (contexts) => {
   const {
     some, // this store's namespace is `some`
-  } = stores
-  const { name, age, growAge } = some
+  } = contexts
+  const {
+    name,
+    age, // this may be a computed property
+    growAge, // this may be a method
+  } = some
+  // return what you want to patch to component's props
   return {
     name,
     age,
@@ -180,13 +181,14 @@ const mapToProps = (stores) => {
  * create final props to pass into component
  */
 const mergeToProps = (mappedProps, ownProps) => {
+  // return what you want to patch to component's props
   return {
     ...mappedProps,
     ...ownProps,
   }
 }
 
-export default connect(mapToProps, mergeToProps)(MyComponent)
+export default connect(mapToProps, mergeToProps)(MyComponent) // MyContent instances will receive props which is from mergeToProps
 ```
 
 Methods of stores are auto bound, however, methods of models are not. Even, methods of models can not be descontructed, you should must bind them manually.
@@ -212,9 +214,14 @@ const mapToProps = (stores) => {
 
 ### getState()
 
-Get whole combined state of all stores.
+Get whole combined state of all stores in global.
 
-### subscribe(fn: Function): Function
+```js
+const states = getState()
+const state = states.some // get state of some namespace
+```
+
+### subscribe(fn: function): function
 
 Subscribe to changes in the state. When any change happens in state, the function `fn` will be invoke.
 It returns a `unsubscribe` function.
@@ -229,7 +236,7 @@ The given function receive three parameters:
 
 ```js
 subscribe(function(name, key, value) {
-  // name: string, the name property's value of a store
+  // name: string, namespace
   // key: array|string, the keyPath of the changed property
   // value: any, the changed value
 })
@@ -241,9 +248,9 @@ You can use subscribe to record changes of your application.
 
 I provide several make functions to create connect functions more quickly.
 
-### make(define: object|Function, merge?: Function): Function
+### makeGlobal(define: object|function, merge?: function): function
 
-make = use + connect
+makeGlobal = use + connect
 
 - define: def object or a function return def object
 - merge: function to the registered  merge store with component's own props
@@ -256,7 +263,7 @@ function MyComponent(props) {
   // ...
 }
 
-export default make({
+export default makeGlobal({
   state: {
     name: 'tomy',
     age: 10,
@@ -271,7 +278,7 @@ export default make({
 
 This make it more quick to wrap a component.
 
-Notice, here we did not given a name, this store is an anonymous global store, it can be used again only with this `wrap` function. Because there is no `name` property, the store will be desconstructed to props for the component. This rule works on all make functions (`makeLocal`, `makeShared`).
+Notice, here we did not given a name, this store is an anonymous global store, it can be used again only with this `wrap` function.
 
 To registered a namespace store, pass `name` property.
 
@@ -282,7 +289,7 @@ function MyComponent(props) {
   // ...
 }
 
-export default make({
+export default makeGlobal({
   // this name will be registered in global space, which can be reused
   name: 'some',
   state: {
@@ -297,7 +304,7 @@ As you seen, the component will receive a prop with the name `some`. A named sto
 However, in some case, you want to descontruct properties all by yourself. The second parameter `merge` works now.
 
 ```js
-const wrap = make(
+const wrap = makeGlobal(
   {
     name: 'some',
     state: {
@@ -325,23 +332,27 @@ function MyComponent(props) {
 export default wrap(MyComponents)
 ```
 
-If defined a model, the first parameter of `merge` will be the model. So you can do desconstructing in `merge` function like what you do in `connect`.
-
-To make it more quick to define a Model, you can return the Model directly:
-
 ```js
-function define() {
+function some() {
   class SomeModel extends Model {}
-  return SomeModel // => { model: SomeModel } which is anonymous
+  return SomeModel
 }
-const wrap = make(define, (model, props) => {
+const wrap = makeGlobal(some, (model, props) => {
   // ...
 })
 ```
 
 This make it more quick to use a Model.
 
-### makeLocal(define: Function, merge?: Function): Function
+**reuse registered store/model**
+
+For example, if you have used `use` to register a store, you can use `makeGlobal` to reuse it quickly:
+
+```js
+const wrap = makeGlobal({ name: 'some' }) // reuse some namespace quickly.
+```
+
+### makeLocal(define: function, merge?: function): function
 
 Use vue's state management, use react's UI render. If you want to taste replacing vue's template with react, do like this:
 
@@ -389,7 +400,7 @@ The usage is almost same with `make`, only differences:
 - only receive function as `define`
 - the store/model will be destory when the component unmount, `onUse` hook will be invoked each time a component initialize
 
-### makeShared(define: Function): Function
+### makeShared(define: function): function
 
 `makeLocal` only works for the wrapped component, the store will be destory when the component unmounts. `makeShared` works for multiple wrapped *live* components.
 
@@ -400,7 +411,7 @@ const ComponentA = wrap(A)
 const ComponentB = wrap(B)
 ```
 
-Now `ComponentA` and `ComponentB` will share the same store during the components are living. When all components unmount (die), the store will be destoried. If some of them mount again, a new store will be created.
+Now `ComponentA` and `ComponentB` will share the same store during the components are living. When all components unmount (die), the store will be destoried. If some of them mount again, a pure new store will be created.
 
 The usage is almost same with `makeLocal`, only differences:
 
@@ -411,46 +422,7 @@ The usage is almost same with `makeLocal`, only differences:
 
 I know you are more interested in using react hooks in Functional Components. `react-tyshemo` provides several hook functions.
 
-### useObserver(subscribe, unsubscribe?)
-
-This is a helper hook function which help you observe some reactive object to rerender.
-
-```js
-function MyComponent(props) {
-  const { reactiveObject } = props
-
-  useObserver(
-    dispatch => reactiveObject.on('change', dispatch), // when reactiveObject changes inside, the component will rerender
-    dispatch => reactiveObject.off('change', dispatch), // when the component will unmount, this function will run to free memory reference
-  )
-
-  /// ....
-}
-```
-
-If subscribe function return a function, we will run this function before `unsubscribe`. And `unsubscribe` is optional, so in some system, you can use the return function as unsubscribe function.
-
-```js
-useObserver(dispatch => some.watch('a', dispatch)) // watch will return unwatch function
-```
-
-If you get a store or a model instance, you do not need to pass subscribe/unsubscribe function, just pass the store or the model.
-
-```js
-function MyComponent(props) {
-  const { model } = props
-
-  useObserver(model)
-
-  /// ....
-}
-```
-
-It will subscribe and unsubscribe automaticly.
-
-This hook function can not only be used with store and model, but also with any reactive system.
-
-### useLocal(define: Function, deps = [])
+### useLocal(define: function, deps = [])
 
 In sometimes, you may want to create a local store only for current component.
 To use hook function, we provide `useLocal`.
@@ -519,47 +491,15 @@ export default function MyComponent() {
 
 `define` function is the same usage with `makeLocal`.
 
-### useGlobal(define|def|name)
+### useGlobal(name: string|symbol)
 
 React hook function to use a store which is registered globally.
 
-- define: a function return def object, the same behaviour with `def`
-- def: a def object, if namespace exist, return the store directly, or it registers the store and return it
-- name: when you pass a name, it means you have registered the namespace store globally
-
-```js
-function MyComponent(props) {
-  const store = useGlobal(function define() {
-    return {
-      name: 'my-store',
-      // if 'my-store' has been registered, you will get the registered store, this state will have no effects
-      // if not registered, this will be used as default state
-      state: {
-        a: 1,
-        b: 2,
-      },
-    }
-  })
-}
-```
-
-```js
-function MyComponent(props) {
-  const store = useGlobal({
-    name: 'my-store',
-    // if 'my-store' has been registered, you will get the registered store, this state will have no effects
-    // if not registered, this will be used as default state
-    state: {
-      a: 1,
-      b: 2,
-    },
-  })
-}
-```
+- name: global context namespace
 
 ```js
 use({
-  name: 'my-store', // if the store has been registered, this will have no effects
+  name: 'my-store',
   state: {},
 })
 
@@ -568,7 +508,30 @@ function MyComponent(props) {
 }
 ```
 
-It is NOT recommended to use `useGlobal` directly, this make code dispersed, you may not know where was a store registered. It is best to use `connect`.
+It is NOT recommended to use `useGlobal` directly, this make code dispersed, you may not know where was a store registered. To prevent this, you can think up a file structure resolution.
+
+```js
+// stores.js
+const name1 = use(define1)
+const name2 = use(define2)
+
+export const names = {
+  SOME: name1,
+  THEN: name2,
+}
+```
+
+```js
+import { names } from './stores.js'
+
+function MyComponent() {
+  const some = useGlobal(names.SOME)
+  // ...
+}
+// ...
+```
+
+With this structure, you can know where the stores come from.
 
 ## Mutable State
 

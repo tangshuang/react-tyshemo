@@ -59,7 +59,7 @@ const createOfModel = (GivenModel) => {
 
 const createOfDef = (def) => {
   const {
-    state: givenState,
+    state: givenState = {},
     computed = {},
     methods: givenMothods = {},
     hooks: givenHooks = {},
@@ -134,7 +134,8 @@ const createOfDef = (def) => {
 }
 
 const create = (define) => {
-  const { name } = define
+  let { name } = define
+  name = name || Symbol()
 
   if (isFunction(define)) {
     const res = define()
@@ -143,7 +144,13 @@ const create = (define) => {
       return { name, model, store, context }
     }
     else {
-      const { store, context, methods, hooks } = createOfDef(res)
+      const def = createOfDef(res)
+      const { store, context, methods, hooks } = def
+
+      if (def.name) {
+        name = def.name
+      }
+
       return { name, store, context, methods, hooks }
     }
   }
@@ -202,12 +209,15 @@ const createWatcher = (name) => {
  *   }
  * })(MyComponent)
  */
-export function use(define) {
+export function use(define, fallback) {
   const { name, store, hooks, context } = create(define)
 
   // has been registered
   if (_stores[name]) {
-    throw new Error(`ReactTyshemo: [${name}] has been registered, use another namespace.`)
+    if (isFunction(fallback)) {
+      fallback(name)
+    }
+    return name
   }
 
   // register
@@ -344,12 +354,10 @@ export function subscribe(fn) {
  * @param {function} define store changes when deps changes
  */
 export function useLocal(define, deps = []) {
-  const { name } = define
-
   const [, update] = React.useState()
   const mounted = React.useRef(false)
   const unmounted = React.useRef(false)
-  const namespace = React.useRef(Symbol('local:' + name))
+  const namespace = React.useRef('')
 
   const callHook = React.useCallback((hooks, fn) => {
     if (!hooks) {
@@ -369,7 +377,7 @@ export function useLocal(define, deps = []) {
   }, [])
 
   const { context, hooks, store } = React.useMemo(() => {
-    const { context, hooks, store } = create(define)
+    const { name, context, hooks, store } = create(define)
 
     callHook(hooks, 'onUse')
     callHook(hooks, 'onConnect')
@@ -380,7 +388,7 @@ export function useLocal(define, deps = []) {
      * there is no need to patch to contexts and hooks
      */
 
-    const name = namespace.current
+    namespace.current = name
     _stores[name] = store
     store.watch('*', createWatcher(name), true)
 
@@ -424,7 +432,7 @@ export function useLocal(define, deps = []) {
  * use hook
  * @param {*} name
  */
-export function useGlobal(define) {
+export function useGlobal(name) {
   const [, update] = React.useState()
   const mounted = React.useRef(false)
   const unmounted = React.useRef(false)
@@ -447,9 +455,11 @@ export function useGlobal(define) {
   }, [])
 
   const { context, hooks, store } = React.useMemo(() => {
-    const name = use(define)
-
     const store = _stores[name]
+    if (!store) {
+      throw new Error(`ReactTyshemo: global ${name} has not been registered when useGlobal(${name}).`)
+    }
+
     const context = _contexts[name]
     const hooks = _hooks[name]
 
@@ -531,7 +541,7 @@ export function useObserver(subscribe, unsubscribe, deps = []) {
  * use def, and return a connect function which contains only this namespace
  * @param {function|object} define
  * @example
- * const connect = make({
+ * const connect = makeGlobal({
  *   name: 'myState',
  *   state: {
  *     some: 'xxx',
@@ -545,7 +555,7 @@ export function useObserver(subscribe, unsubscribe, deps = []) {
  *
  * export default connect(MyComponent)
  */
-export function make(define, merge) {
+export function makeGlobal(define, merge) {
   const name = use(define)
   return connect(
     // dep collect, map
