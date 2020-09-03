@@ -4,7 +4,7 @@
   "description": "A react state manager drived by tyshemo.",
   "main": "index.js",
   "scripts": {
-    "demo": "parcel _demo/index.html --out-dir=.cache/.dist",
+    "dev": "parcel _demo/index.html --out-dir=.cache/.dist",
     "build:main": "babel src/index.js -o index.js",
     "build:form": "babel src/form.js -o form.js",
     "build": "npm run build:main && npm run build:form"
@@ -34,13 +34,13 @@
     "parcel-bundler": "^1.12.4",
     "react": "^16.13.1",
     "react-dom": "^16.13.1",
-    "tyshemo": "^8.8.0"
+    "tyshemo": "latest"
   },
   "dependencies": {
-    "ts-fns": "^6.4.4"
+    "ts-fns": "latest"
   },
   "peerDependencies": {
     "react": "^16.13.1",
-    "tyshemo": "^8.5.0"
+    "tyshemo": "latest"
   }
 }

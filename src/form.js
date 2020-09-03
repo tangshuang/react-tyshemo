@@ -1,6 +1,6 @@
 import React from 'react'
 import { useObserver } from './index.js'
-
+import { inArray, isFunction } from 'ts-fns'
 
 export function Field(props) {
   const { model, name, render, component: Component, map, children } = props
@@ -12,16 +12,11 @@ export function Field(props) {
   )
 
   const view = model.$views[name]
-  const attrs = {
-    ...view,
-    onChange(value) {
-      view.value = value
-    },
-  }
+  const attrs = typeof map === 'function' ? map(view) : view
+  const onChange = (v) => view.value = v
 
-  const final = typeof map === 'function' ? map(attrs) : {}
-
-  return Component ? <Component {...final}>{children}</Component> : render ? render({ ...final, children }) : null
+  return Component ? <Component {...attrs} onChange={onChange}>{children}</Component>
+    : render ? render({ ...attrs, onChange, children }) : null
 }
 
 
@@ -36,14 +31,22 @@ export function Fields(props) {
 
   const { $views } = model
   const views = names.map(name => $views[name])
-  const attrs = views.map(view => ({
-    ...view,
-    onChange(value) {
-      view.value = value
-    },
-  }))
 
-  const final = typeof map === 'function' ? map(attrs) : {}
+  let attrs = {}
+  if (isFunction(map)) {
+    attrs = map(views)
+  }
+  else {
+    views.forEach((view, key) => attrs[key] = view)
+  }
 
-  return Component ? <Component {...final}>{children}</Component> : render ? render({ ...final, children }) : null
+  const onChange = (key, value) => {
+    if (!inArray(key, names)) {
+      return
+    }
+    $views[key] = value
+  }
+
+  return Component ? <Component {...attrs} onChange={onChange}>{children}</Component>
+    : render ? render({ ...attrs, onChange, children }) : null
 }

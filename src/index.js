@@ -9,8 +9,6 @@ import {
   map,
   isString,
   isInheritedOf,
-  isObject,
-  createRandomString,
   define,
 } from 'ts-fns'
 
@@ -20,169 +18,142 @@ const _contexts = {}
 
 const _observers = []
 
-function create(def) {
+const createDispatch = (store) => (key, fn) => {
+  fn = isFunction(key) ? key : fn
+  key = isString(key) ? key : ''
+
+  const { data, state } = store
+
+  const prev = parse(data, key)
+  const invalid = parse(state, key)
+
+  if (fn) {
+    fn()
+  }
+
+  const value = parse(data, key)
+  const next = value
+  const active = parse(state, key)
+  store.dispatch(key, {
+    value,
+    next,
+    prev,
+    active,
+    invalid,
+  }, true)
+}
+
+const createOfModel = (GivenModel) => {
+  class Model extends GivenModel {
+    dispatch(key, fn) {
+      return createDispatch(this.$store)(key, fn)
+    }
+  }
+
+  const model = new Model()
+  const store = model.$store
+  const context = model
+
+  return { model, store, context }
+}
+
+const createOfDef = (def) => {
   const {
-    name,
-    model,
-    state,
+    state: givenState,
     computed = {},
-    methods = {},
-    hooks = {},
+    methods: givenMothods = {},
+    hooks: givenHooks = {},
     watch = {},
   } = def
 
-  let $store, $model, $context
+  const store = new Store(givenState)
+  const { state } = store
 
-  const createDispatch = (store) => (key, fn) => {
-    fn = isFunction(key) ? key : fn
-    key = isString(key) ? key : ''
+  // computed
+  each(computed, (compute, key) => {
+    store.define(key, compute)
+  })
 
-    const { data, state } = store
-
-    const prev = parse(data, key)
-    const invalid = parse(state, key)
-
-    if (fn) {
-      fn()
-    }
-
-    const value = parse(data, key)
-    const next = value
-    const active = parse(state, key)
-    store.dispatch(key, {
-      value,
-      next,
-      prev,
-      active,
-      invalid,
-    }, true)
-  }
+  // context
+  const methods = {}
+  const context = new Proxy(state, {
+    get(_, key) {
+      if (methods[key]) {
+        return methods[key]
+      }
+      else {
+        return state[key]
+      }
+    },
+    set(_, key, value) {
+      if (methods[key]) {
+        return false
+      }
+      else {
+        state[key] = value
+        return true
+      }
+    },
+    deleteProperty(_, key) {
+      if (key in state) {
+        delete state[key]
+        return true
+      }
+      else {
+        return false
+      }
+    },
+  })
+  // patch $methods
+  define(methods, 'dispatch', {
+    value: createDispatch(store),
+  })
+  each(givenMothods, (fn, key) => {
+    methods[key] = fn.bind(context)
+  })
 
   /**
-   * if model is return, state, computed, methods will not work
-   * model should be a class extended from Model
-   *
+   * propagation of models
    */
-  if (model && isInheritedOf(model, Model)) {
-    $model = new model()
-    $store = $model.$store
-    $context = $model
-
-    define($model, 'dispatch', {
-      value: createDispatch($store),
-    })
-
-    // bind methods with model
-    // make it enumerable on instance so that we can use descontruction
-    const protos = model.prototype
-    const keys = Object.getOwnPropertyNames(protos)
-    keys.forEach((key) => {
-      const proto = protos[key]
-      if (!isFunction(proto)) {
-        return
-      }
-      if (key === 'constructor' || key === 'init') {
-        return
-      }
-      if (key.indexOf('on') === 0) {
-        return
-      }
-      define($model, key, {
-        value: proto.bind($model),
-        enumerable: true,
-      })
-    })
-  }
-  else if (state) {
-    $store = new Store(state)
-
-    const $state = $store.state
-
-    // computed
-    each(computed, (compute, key) => {
-      $store.define(key, compute)
-    })
-
-    // context
-    const $methods = {}
-    $context = new Proxy({}, {
-      get(_, key) {
-        if ($methods[key]) {
-          return $methods[key]
-        }
-        else {
-          return $state[key]
-        }
-      },
-      set(_, key, value) {
-        if ($methods[key]) {
-          return false
-        }
-        else {
-          $state[key] = value
-          return true
-        }
-      },
-      deleteProperty(_, key) {
-        if (key in $state) {
-          delete $state[key]
-          return true
-        }
-        else {
-          return false
-        }
-      },
-      ownKeys() {
-        const stateKeys = Object.keys($state)
-        const methodKeys = Object.keys($methods)
-        return [...stateKeys, ...methodKeys]
-      },
-      getOwnPropertyDescriptor(_, key) {
-        const methodKeys = Object.keys($methods)
-        const isMethod = methodKeys.includes(key)
-        return {
-          enumerable: !isMethod,
-          configurable: true,
-        }
-      },
-    })
-    // patch $methods
-    define($methods, 'dispatch', {
-      value: createDispatch($store),
-    })
-    each(methods, (fn, key) => {
-      $methods[key] = fn.bind($context)
-    })
-
-    /**
-     * propagation of models
-     */
-    $store.observe(
-      // the submodel of a parent model will propagate to the parent model, so we do not need to observe them
-      v => isInstanceOf(v, Model) && !v.$parent,
-      v => dispatch => v.watch('*', dispatch, true),
-      v => dispatch => v.unwatch('*', dispatch),
-    )
-  }
+  store.observe(
+    // the submodel of a parent model will propagate to the parent model, so we do not need to observe them
+    v => isInstanceOf(v, Model) && !v.$parent,
+    v => dispatch => v.watch('*', dispatch, true),
+    v => dispatch => v.unwatch('*', dispatch),
+  )
 
   // hooks
-  const $hooks = map(hooks, fn => fn.bind($context))
+  const hooks = map(givenHooks, fn => fn.bind(context))
 
   // watch
   each(watch, (fn, key) => {
-    $store.watch(key, fn.bind($context), true)
+    store.watch(key, fn.bind(context), true)
   })
 
-  return {
-    name,
-    model: $model,
-    store: $store,
-    hooks: $hooks,
-    context: $context,
+  return { store, methods, hooks, context }
+}
+
+const create = (define) => {
+  const { name } = define
+
+  if (isFunction(define)) {
+    const res = define()
+    if (isInheritedOf(res, Model)) {
+      const { model, store, context } = createOfModel(res)
+      return { name, model, store, context }
+    }
+    else {
+      const { store, context, methods, hooks } = createOfDef(res)
+      return { name, store, context, methods, hooks }
+    }
+  }
+  else {
+    const { store, context, methods, hooks } = createOfDef(define)
+    return { name, store, context, methods, hooks }
   }
 }
 
-function createDispatch(name) {
+const createWatcher = (name) => {
   const dispatch = ({ key, value }) => {
     if (_observers.length) {
       _observers.forEach((fn) => {
@@ -202,7 +173,6 @@ function createDispatch(name) {
  * @param {object} def.methods the methods to call with context this
  * @param {object} def.hooks the functions to do when on certain moment
  * @param {object} def.watch the functions to react when state change
- * @param {function} [fallback] when the name is existing, fallback function will be invoked
  * @example
  * import { use, connect } from 'tyshemo-react'
  *
@@ -232,18 +202,13 @@ function createDispatch(name) {
  *   }
  * })(MyComponent)
  */
-export function use(define, fallback) {
-  const def = isFunction(define) ? define() : define
-  const { name } = def
+export function use(define) {
+  const { name, store, hooks, context } = create(define)
 
   // has been registered
   if (_stores[name]) {
-    const names = Object.keys(_stores)
-    isFunction(fallback) && fallback(names)
-    return false
+    throw new Error(`ReactTyshemo: [${name}] has been registered, use another namespace.`)
   }
-
-  const { store, hooks, context } = create(def)
 
   // register
   _stores[name] = store
@@ -251,14 +216,14 @@ export function use(define, fallback) {
   _contexts[name] = context
 
   // subscribe
-  store.watch('*', createDispatch(name), true)
+  store.watch('*', createWatcher(name), true)
 
   // onUse
   if (hooks.onUse) {
     hooks.onUse()
   }
 
-  return true
+  return name
 }
 
 /**
@@ -379,10 +344,12 @@ export function subscribe(fn) {
  * @param {function} define store changes when deps changes
  */
 export function useLocal(define, deps = []) {
+  const { name } = define
+
   const [, update] = React.useState()
   const mounted = React.useRef(false)
   const unmounted = React.useRef(false)
-  const namespace = React.useRef('local:' + createRandomString(8))
+  const namespace = React.useRef(Symbol('local:' + name))
 
   const callHook = React.useCallback((hooks, fn) => {
     if (!hooks) {
@@ -402,13 +369,7 @@ export function useLocal(define, deps = []) {
   }, [])
 
   const { context, hooks, store } = React.useMemo(() => {
-    let def = define()
-
-    if (isInheritedOf(def, Model)) {
-      def = { model: def }
-    }
-
-    const { context, hooks, store } = create(def)
+    const { context, hooks, store } = create(define)
 
     callHook(hooks, 'onUse')
     callHook(hooks, 'onConnect')
@@ -416,11 +377,12 @@ export function useLocal(define, deps = []) {
 
     /**
      * patch current store to global _stores, so that we can use `subscribe` to record the changes of this store
+     * there is no need to patch to contexts and hooks
      */
 
-    const space = namespace.current
-    _stores[space] = store
-    store.watch('*', createDispatch(space), true)
+    const name = namespace.current
+    _stores[name] = store
+    store.watch('*', createWatcher(name), true)
 
     return { context, hooks, store }
   }, deps)
@@ -432,8 +394,8 @@ export function useLocal(define, deps = []) {
     callHook(hooks, 'onMount')
 
     return () => {
-      const space = namespace.current
-      delete _stores[space]
+      const name = namespace.current
+      delete _stores[name]
       unmounted.current = true
       callHook(hooks, 'onUnmount')
     }
@@ -462,7 +424,7 @@ export function useLocal(define, deps = []) {
  * use hook
  * @param {*} name
  */
-export function useGlobal(name) {
+export function useGlobal(define) {
   const [, update] = React.useState()
   const mounted = React.useRef(false)
   const unmounted = React.useRef(false)
@@ -485,22 +447,9 @@ export function useGlobal(name) {
   }, [])
 
   const { context, hooks, store } = React.useMemo(() => {
-    if (isFunction(name)) {
-      const def = name()
-      use(def)
-      name = def.name
-    }
-    else if (isObject(name)) {
-      use(name)
-      name = name.name
-    }
+    const name = use(define)
 
     const store = _stores[name]
-
-    if (!store) {
-      return {} // make descontruct work, don't throw error
-    }
-
     const context = _contexts[name]
     const hooks = _hooks[name]
 
@@ -597,30 +546,20 @@ export function useObserver(subscribe, unsubscribe, deps = []) {
  * export default connect(MyComponent)
  */
 export function make(define, merge) {
-  const def = isFunction(define) ? define() : define
-  const { name } = def
-
-  if (!name) {
-    def.name = createRandomString(8)
-  }
-  use(def)
-
+  const name = use(define)
   return connect(
     // dep collect, map
-    (stores) => ({
-      store: stores[def.name],
+    (contexts) => ({
+      context: contexts[name],
     }),
     // merge props
     (mappedProps, ownProps) => {
-      const { store } = mappedProps
+      const { context } = mappedProps
       if (isFunction(merge)) {
-        return merge(store, ownProps)
-      }
-      else if (name) {
-        return { [name]: store, ...ownProps }
+        return merge(context, ownProps)
       }
       else {
-        return { ...store, ...ownProps }
+        return { [name]: context, ...ownProps }
       }
     },
   )
@@ -673,19 +612,19 @@ export function makeLocal(define, merge) {
         this.init()
       }
       init() {
-        const def = define()
-        const { store, hooks, context, name } = create(def)
+        const { store, hooks, context, name: prop } = create(define)
+        const name = Symbol('local:' + prop)
 
         callHook(hooks, 'onUse')
         callHook(hooks, 'onConnect')
         callHook(hooks, 'onInit')
 
         // patch to global stores
-        const space = 'local:' + createRandomString(8)
-        _stores[space] = store
-        store.watch('*', createDispatch(space), true)
+        // there is no need to patch contexts and hooks
+        _stores[name] = store
+        store.watch('*', createWatcher(name), true)
 
-        this.$$ = { name, store, hooks, context, space }
+        this.$$ = { name, store, hooks, context, prop }
       }
       componentDidMount() {
         const { store, hooks } = this.$$
@@ -697,25 +636,22 @@ export function makeLocal(define, merge) {
         callHook(hooks, 'onUpdate')
       }
       componentWillUnmount() {
-        const { store, hooks, space } = this.$$
+        const { store, hooks, name } = this.$$
         store.unwatch('*', this.update)
         callHook(hooks, 'onUnmount')
-        delete _stores[space]
+        delete _stores[name]
         this.$$ = null
       }
       render() {
-        const { name, context } = this.$$
+        const { prop, context } = this.$$
         const { children, ...props } = this.props
 
         let mergedProps = null
         if (isFunction(merge)) {
           mergedProps = merge(context, props)
         }
-        else if (name) {
-          mergedProps = { [name]: context, ...props }
-        }
         else {
-          mergedProps = { ...context, ...props }
+          mergedProps = { [prop]: context, ...props }
         }
 
         return <Component {...mergedProps}>{children}</Component>
@@ -732,16 +668,16 @@ export function makeLocal(define, merge) {
  */
 export function makeShared(define, merge) {
   const memo = {}
-  const space = 'shared:' + createRandomString(8)
+  const name = Symbol('shared:' + define.name)
 
   const free = () => {
     Object.assign(memo, {
       store: null,
       hooks: null,
       context: null,
-      name: '',
+      prop: '',
     })
-    delete _stores[space]
+    delete _stores[name]
   }
 
   // init
@@ -773,13 +709,12 @@ export function makeShared(define, merge) {
       init() {
         // build def when not exist
         if (!memo.store && !memo.hooks && !memo.context) {
-          const def = define()
-          const { store, hooks, context, name } = create(def)
+          const { store, hooks, context, name: prop } = create(define)
           Object.assign(memo, {
             store,
             hooks,
             context,
-            name,
+            prop,
           })
           callHook(hooks, 'onUse')
           callHook(hooks, 'onConnect')
@@ -788,8 +723,8 @@ export function makeShared(define, merge) {
            * patch current store to global _stores, so that we can use `subscribe` to record the changes of this store
            */
 
-          _stores[space] = store
-          store.watch('*', createDispatch(space), true)
+          _stores[name] = store
+          store.watch('*', createWatcher(name), true)
         }
 
         callHook(memo.hooks, 'onInit')
@@ -823,18 +758,15 @@ export function makeShared(define, merge) {
         }, 100)
       }
       render() {
-        const { name, context } = memo
+        const { prop, context } = memo
         const { children, ...props } = this.props
 
         let mergedProps = null
         if (isFunction(merge)) {
           mergedProps = merge(context, props)
         }
-        else if (name) {
-          mergedProps = { [name]: context, ...props }
-        }
         else {
-          mergedProps = { ...context, ...props }
+          mergedProps = { [prop]: context, ...props }
         }
 
         return <Component {...mergedProps}>{children}</Component>
