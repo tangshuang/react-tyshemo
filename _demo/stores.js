@@ -1,4 +1,4 @@
-import { Model } from "tyshemo";
+import { Model, Meta } from "tyshemo";
 
 // create a class which is not reactive when properties change
 class Book {
@@ -49,29 +49,29 @@ export function one() {
 
 export function some() {
   class SomeModel extends Model {
-    static name = {
+    static name = new Meta({
       default: 'tomy',
-    }
-    static age = {
+    })
+    static age = new Meta({
       default: 10,
-    }
-    static sex = {
+    })
+    static sex = new Meta({
       default: 'M',
-    }
-    static height = {
+    })
+    static height = new Meta({
       default: 0,
       compute() {
         return this.age * 5
       },
-    }
-    static book = {
+    })
+    static book = new Meta({
       default: () => new Book(),
-    }
+    })
 
     // make sure
-    static html = {
+    static html = new Meta({
       default: ''
-    }
+    })
 
     changeSex(sex) {
       this.sex = sex;

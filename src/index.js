@@ -12,6 +12,7 @@ import {
   define,
 } from 'ts-fns'
 
+const _names = {}
 const _stores = {}
 const _hooks = {}
 const _contexts = {}
@@ -134,29 +135,24 @@ const createOfDef = (def) => {
 }
 
 const create = (define) => {
-  let { name } = define
-  name = name || Symbol()
-
-  if (isFunction(define)) {
-    const res = define()
+  const create = (res) => {
     if (isInheritedOf(res, Model)) {
       const { model, store, context } = createOfModel(res)
+      const name = Symbol()
       return { name, model, store, context }
     }
     else {
-      const def = createOfDef(res)
-      const { store, context, methods, hooks } = def
-
-      if (def.name) {
-        name = def.name
-      }
-
+      const { store, context, methods, hooks } = createOfDef(res)
+      const { name = Symbol() } = res
       return { name, store, context, methods, hooks }
     }
   }
+  if (isFunction(define)) {
+    const res = define()
+    return create(res)
+  }
   else {
-    const { store, context, methods, hooks } = createOfDef(define)
-    return { name, store, context, methods, hooks }
+    return create(define)
   }
 }
 
