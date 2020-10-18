@@ -1,8 +1,8 @@
-import React from "react";
+import React from 'react'
 
 // create a functional component
 export function MyComponent(props) {
-  const { one } = props;
+  const { store } = props
   const {
     name,
     age,
@@ -11,27 +11,27 @@ export function MyComponent(props) {
     sex,
     html,
     book,
-  } = one;
+  } = store
 
-  // notice, we should invoke methods of one by use one.change, or the `this` in methods may not point to `one`
+  // notice, we should invoke methods of store by use store.change, or the `this` in methods may not point to `store`
 
   return (
     <>
       <div>
-        {name}: {age}, {height}, {married ? "married," : ""} {sex ? "F" : "M"}
+        {name}: {age}, {height}, {married ? 'married,' : ''} {sex ? 'F' : 'M'}
       </div>
       <div>book: {book.price}</div>
       <div>
-        <button type="button" onClick={() => one.age++}>
+        <button type='button' onClick={() => store.age++}>
           grow age
         </button>
-        <button type="button" onClick={() => one.changeSex(!sex)}>
+        <button type='button' onClick={() => store.changeSex(!sex)}>
           change sex
         </button>
         <button
-          type="button"
+          type='button'
           onClick={() =>
-            one.updateBook({ price: (Math.random() * 100).toFixed(2) })
+            store.updateBook({ price: (Math.random() * 100).toFixed(2) })
           }
         >
           update book price
@@ -39,5 +39,5 @@ export function MyComponent(props) {
       </div>
       <pre style={{ marginTop: 40 }}>{html}</pre>
     </>
-  );
+  )
 }

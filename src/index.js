@@ -12,7 +12,8 @@ import {
   define,
 } from 'ts-fns'
 
-const _names = {}
+const _registered = []
+
 const _stores = {}
 const _hooks = {}
 const _contexts = {}
@@ -138,21 +139,22 @@ const create = (define) => {
   const create = (res) => {
     if (isInheritedOf(res, Model)) {
       const { model, store, context } = createOfModel(res)
-      const name = Symbol()
-      return { name, model, store, context }
+      return { model, store, context, hooks: {} }
     }
     else {
       const { store, context, methods, hooks } = createOfDef(res)
-      const { name = Symbol() } = res
+      const { name } = res
       return { name, store, context, methods, hooks }
     }
   }
   if (isFunction(define)) {
     const res = define()
-    return create(res)
+    const def = create(res)
+    return def
   }
   else {
-    return create(define)
+    const def = create(define)
+    return def
   }
 }
 
@@ -169,7 +171,7 @@ const createWatcher = (name) => {
 
 /**
  *
- * @param {object|function} define
+ * @param {object|function} def
  * @param {string} def.name the key of namespace in the whole state, for example, when name is 'some', you can get this local store by state.some or store.get('some')
  * @param {object} def.state the init state of this namespace
  * @param {object} def.computed computed properties
@@ -206,9 +208,15 @@ const createWatcher = (name) => {
  * })(MyComponent)
  */
 export function use(define, fallback) {
-  const { name, store, hooks, context } = create(define)
+  const item = _registered.find(item => item.define === define)
+  if (item) {
+    if (isFunction(fallback)) {
+      fallback(item.name)
+    }
+    return item.name
+  }
 
-  // has been registered
+  const { name = Symbol('global store'), store, context, hooks } = create(define)
   if (_stores[name]) {
     if (isFunction(fallback)) {
       fallback(name)
@@ -220,6 +228,7 @@ export function use(define, fallback) {
   _stores[name] = store
   _hooks[name] = hooks
   _contexts[name] = context
+  _registered.push({ name, define })
 
   // subscribe
   store.watch('*', createWatcher(name), true)
@@ -321,6 +330,79 @@ export function connect(mapToProps, mergeToProps) {
 }
 
 /**
+ * use hook
+ * @param {*} name
+ */
+export function useStore(name) {
+  const [, update] = React.useState()
+  const mounted = React.useRef(false)
+  const unmounted = React.useRef(false)
+
+  const callHook = React.useCallback((hooks, fn) => {
+    if (!hooks) {
+      return
+    }
+
+    const hook = hooks[fn]
+    if (isFunction(hook)) {
+      hook()
+    }
+  }, [])
+
+  const forceUpdate = React.useCallback(() => {
+    if (!unmounted.current) {
+      update({})
+    }
+  }, [])
+
+  const { context, hooks, store } = React.useMemo(() => {
+    const store = _stores[name]
+    const context = _contexts[name]
+    const hooks = _hooks[name]
+
+    callHook(hooks, 'onConnect')
+    callHook(hooks, 'onInit')
+
+    return { context, hooks, store }
+  }, [])
+
+  // mount
+  // unmount
+  React.useEffect(() => {
+    mounted.current = true
+    callHook(hooks, 'onMount')
+
+    return () => {
+      unmounted.current = true
+      callHook(hooks, 'onUnmount')
+    }
+  }, [])
+
+  // watch
+  React.useEffect(() => {
+    // the passed name store may not exist
+    if (!store) {
+      return
+    }
+
+    store.watch('*', forceUpdate, true)
+
+    return () => {
+      store.unwatch('*', update, true)
+    }
+  }, [store])
+
+  // update
+  React.useEffect(() => {
+    if (mounted.current) {
+      callHook(hooks, 'onUpdate')
+    }
+  })
+
+  return context
+}
+
+/**
  * get whole state
  */
 export function getState() {
@@ -374,6 +456,7 @@ export function useLocal(define, deps = []) {
 
   const { context, hooks, store } = React.useMemo(() => {
     const { name, context, hooks, store } = create(define)
+    const localName = Symbol(name || 'local store')
 
     callHook(hooks, 'onUse')
     callHook(hooks, 'onConnect')
@@ -384,9 +467,9 @@ export function useLocal(define, deps = []) {
      * there is no need to patch to contexts and hooks
      */
 
-    namespace.current = name
-    _stores[name] = store
-    store.watch('*', createWatcher(name), true)
+    namespace.current = localName
+    _stores[localName] = store
+    store.watch('*', createWatcher(localName), true)
 
     return { context, hooks, store }
   }, deps)
@@ -425,263 +508,18 @@ export function useLocal(define, deps = []) {
 }
 
 /**
- * use hook
- * @param {*} name
- */
-export function useGlobal(name) {
-  const [, update] = React.useState()
-  const mounted = React.useRef(false)
-  const unmounted = React.useRef(false)
-
-  const callHook = React.useCallback((hooks, fn) => {
-    if (!hooks) {
-      return
-    }
-
-    const hook = hooks[fn]
-    if (isFunction(hook)) {
-      hook()
-    }
-  }, [])
-
-  const forceUpdate = React.useCallback(() => {
-    if (!unmounted.current) {
-      update({})
-    }
-  }, [])
-
-  const { context, hooks, store } = React.useMemo(() => {
-    const store = _stores[name]
-    if (!store) {
-      throw new Error(`ReactTyshemo: global ${name} has not been registered when useGlobal(${name}).`)
-    }
-
-    const context = _contexts[name]
-    const hooks = _hooks[name]
-
-    callHook(hooks, 'onConnect')
-    callHook(hooks, 'onInit')
-
-    return { context, hooks, store }
-  }, [])
-
-  // mount
-  // unmount
-  React.useEffect(() => {
-    mounted.current = true
-    callHook(hooks, 'onMount')
-
-    return () => {
-      unmounted.current = true
-      callHook(hooks, 'onUnmount')
-    }
-  }, [])
-
-  // watch
-  React.useEffect(() => {
-    // the passed name store may not exist
-    if (!store) {
-      return
-    }
-
-    store.watch('*', forceUpdate, true)
-
-    return () => {
-      store.unwatch('*', update, true)
-    }
-  }, [store])
-
-  // update
-  React.useEffect(() => {
-    if (mounted.current) {
-      callHook(hooks, 'onUpdate')
-    }
-  })
-
-  return context
-}
-
-/**
- *
- * @param {*} subscribe
- * @param {*} unsubscribe
- */
-export function useObserver(subscribe, unsubscribe, deps = []) {
-  // subscribe store or model directly
-  if (isInstanceOf(subscribe, Store) || isInstanceOf(subscribe, Model)) {
-    const reactive = subscribe
-    useObserver(
-      dispatch => reactive.watch('*', dispatch, true),
-      dispatch => reactive.unwatch('*', dispatch),
-      [reactive],
-    )
-    return
-  }
-
-  const [, update] = React.useState()
-  React.useEffect(() => {
-    const forceUpdate = () => update({})
-    const _unsubscribe = subscribe(forceUpdate)
-    return () => {
-      if (isFunction(_unsubscribe)) {
-        _unsubscribe()
-      }
-      if (unsubscribe) {
-        unsubscribe(forceUpdate)
-      }
-    }
-  }, deps)
-}
-
-/**
- * use def, and return a connect function which contains only this namespace
- * @param {function|object} define
- * @example
- * const connect = makeGlobal({
- *   name: 'myState',
- *   state: {
- *     some: 'xxx',
- *   },
- * })
- *
- * function MyComponent(props) {
- *   const { myState } = props
- *   return <span>{myState.some}</span>
- * }
- *
- * export default connect(MyComponent)
- */
-export function makeGlobal(define, merge) {
-  const name = use(define)
-  return connect(
-    // dep collect, map
-    (contexts) => ({
-      context: contexts[name],
-    }),
-    // merge props
-    (mappedProps, ownProps) => {
-      const { context } = mappedProps
-      if (isFunction(merge)) {
-        return merge(context, ownProps)
-      }
-      else {
-        return { [name]: context, ...ownProps }
-      }
-    },
-  )
-}
-
-/**
- *
- * @param {function} define
- * @example
- * function MyComponent(props) {
- *   const { age, updateAge } = props
- *   // ...
- * }
- *
- * const connect = makeLocal(() => {
- *   return {
- *     state: {
- *       age: 10,
- *     },
- *     methods: {
- *       updateAge() {
- *         this.age ++
- *       },
- *     },
- *   }
- * })
- *
- * export default connect(MyComponent)
- */
-export function makeLocal(define, merge) {
-  return function(Component) {
-    const callHook = (hooks, fn) => {
-      if (!hooks) {
-        return
-      }
-
-      const hook = hooks[fn]
-      if (isFunction(hook)) {
-        hook()
-      }
-    }
-
-    class TyshemoConnectedComponent extends React.Component {
-      constructor(props) {
-        super(props)
-        this.state = {}
-        this.update = () => {
-          this.setState({})
-        }
-        this.init()
-      }
-      init() {
-        const { store, hooks, context, name: prop } = create(define)
-        const name = Symbol('local:' + prop)
-
-        callHook(hooks, 'onUse')
-        callHook(hooks, 'onConnect')
-        callHook(hooks, 'onInit')
-
-        // patch to global stores
-        // there is no need to patch contexts and hooks
-        _stores[name] = store
-        store.watch('*', createWatcher(name), true)
-
-        this.$$ = { name, store, hooks, context, prop }
-      }
-      componentDidMount() {
-        const { store, hooks } = this.$$
-        store.watch('*', this.update, true)
-        callHook(hooks, 'onMount')
-      }
-      componentDidUpdate() {
-        const { hooks } = this.$$
-        callHook(hooks, 'onUpdate')
-      }
-      componentWillUnmount() {
-        const { store, hooks, name } = this.$$
-        store.unwatch('*', this.update)
-        callHook(hooks, 'onUnmount')
-        delete _stores[name]
-        this.$$ = null
-      }
-      render() {
-        const { prop, context } = this.$$
-        const { children, ...props } = this.props
-
-        let mergedProps = null
-        if (isFunction(merge)) {
-          mergedProps = merge(context, props)
-        }
-        else {
-          mergedProps = { [prop]: context, ...props }
-        }
-
-        return <Component {...mergedProps}>{children}</Component>
-      }
-    }
-
-    return TyshemoConnectedComponent
-  }
-}
-
-/**
  *
  * @param {function} define
  */
-export function makeShared(define, merge) {
+export function createShared(define) {
   const memo = {}
-  const name = Symbol('shared:' + define.name)
+  const name = Symbol('shared store')
 
   const free = () => {
     Object.assign(memo, {
       store: null,
       hooks: null,
       context: null,
-      prop: '',
     })
     delete _stores[name]
   }
@@ -691,63 +529,65 @@ export function makeShared(define, merge) {
 
   let count = 0
 
-  return function(Component) {
-    const callHook = (hooks, fn) => {
-      if (!hooks) {
-        return
-      }
-
-      const hook = hooks[fn]
-      if (isFunction(hook)) {
-        hook()
-      }
+  const callHook = (hooks, fn) => {
+    if (!hooks) {
+      return
     }
 
-    class TyshemoConnectedComponent extends React.Component {
-      constructor(props) {
-        super(props)
-        this.state = {}
-        this.update = () => {
-          this.setState({})
-        }
-        this.init()
-      }
-      init() {
-        // build def when not exist
-        if (!memo.store && !memo.hooks && !memo.context) {
-          const { store, hooks, context, name: prop } = create(define)
-          Object.assign(memo, {
-            store,
-            hooks,
-            context,
-            prop,
-          })
-          callHook(hooks, 'onUse')
-          callHook(hooks, 'onConnect')
+    const hook = hooks[fn]
+    if (isFunction(hook)) {
+      hook()
+    }
+  }
 
-          /**
-           * patch current store to global _stores, so that we can use `subscribe` to record the changes of this store
-           */
+  return function useShared() {
+    const [, update] = React.useState()
+    const mounted = React.useRef(false)
+    const unmounted = React.useRef(false)
 
-          _stores[name] = store
-          store.watch('*', createWatcher(name), true)
-        }
+    const forceUpdate = React.useCallback(() => {
+      if (!unmounted.current) {
+        update({})
+      }
+    }, [])
 
-        callHook(memo.hooks, 'onInit')
+    const { context, hooks, store } = React.useMemo(() => {
+      // build def when not exist
+      if (!memo.store && !memo.hooks && !memo.context) {
+        const { store, hooks, context } = create(define)
+        Object.assign(memo, {
+          store,
+          hooks,
+          context,
+        })
+        callHook(hooks, 'onUse')
+        callHook(hooks, 'onConnect')
 
-        count ++
+        /**
+         * patch current store to global _stores, so that we can use `subscribe` to record the changes of this store
+         */
+
+        _stores[name] = store
+        store.watch('*', createWatcher(name), true)
       }
-      componentDidMount() {
-        const { store, hooks } = memo
-        store.watch('*', this.update, true)
-        callHook(hooks, 'onMount')
-      }
-      componentDidUpdate() {
-        callHook(memo.hooks, 'onUpdate')
-      }
-      componentWillUnmount() {
-        const { store, hooks } = memo
-        store.unwatch('*', this.update)
+
+      callHook(memo.hooks, 'onInit')
+
+      count ++
+
+      const { context, hooks, store } = memo
+      return { context, hooks, store }
+    }, [])
+
+    // mount
+    // unmount
+    React.useEffect(() => {
+      mounted.current = true
+      callHook(hooks, 'onMount')
+
+      return () => {
+        delete _stores[name]
+        unmounted.current = true
         callHook(hooks, 'onUnmount')
 
         count --
@@ -763,22 +603,24 @@ export function makeShared(define, merge) {
           }
         }, 100)
       }
-      render() {
-        const { prop, context } = memo
-        const { children, ...props } = this.props
+    }, [])
 
-        let mergedProps = null
-        if (isFunction(merge)) {
-          mergedProps = merge(context, props)
-        }
-        else {
-          mergedProps = { [prop]: context, ...props }
-        }
+    // watch
+    React.useEffect(() => {
+      store.watch('*', forceUpdate, true)
 
-        return <Component {...mergedProps}>{children}</Component>
+      return () => {
+        store.unwatch('*', forceUpdate, true)
       }
-    }
+    }, [store])
 
-    return TyshemoConnectedComponent
+    // update
+    React.useEffect(() => {
+      if (mounted.current) {
+        callHook(hooks, 'onUpdate')
+      }
+    })
+
+    return context
   }
 }
