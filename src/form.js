@@ -20,12 +20,10 @@ export function Field(props) {
     const views = model.$views
     const view = views[name]
     const onChange = (v) => view.value = v
-    const value = view.value
     const obj = {
       view,
       onChange,
       model,
-      value,
     }
     nameList.forEach((name) => {
       obj[name] = views[name]
@@ -33,7 +31,19 @@ export function Field(props) {
     return obj
   }, [model, nameList])
 
-  const attrs = useMemo(() => typeof map === 'function' ? map(obj) : obj, [obj, map])
+  const views = model.$views
+  const view = views[name]
+  const { value, readonly, disabled, hidden, required, errors } = view
+  const info = {
+    ...obj,
+    value,
+    readOnly: readonly,
+    disabled,
+    hidden,
+    required,
+    errors,
+  }
+  const attrs = typeof map === 'function' ? map(info) : info
 
   return Component ? <Component {...attrs}>{children}</Component>
     : render ? render({ ...attrs, children })
