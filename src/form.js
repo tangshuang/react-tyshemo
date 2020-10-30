@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react'
 
 export function Field(props) {
-  const { model, name, names, render, component: Component, map, children } = props
+  const { model, name, names = [], render, component: Component, map, children } = props
+  const nameList = [name, ...names]
 
   const [, update] = useState()
-  const nameList = useMemo(() => [name, ...names], [name, names])
 
   useEffect(() => {
     const forceUpdate = () => update({})
@@ -14,7 +14,7 @@ export function Field(props) {
     return () => nameList.forEach((name) => {
       model.unwatch(name, forceUpdate)
     })
-  }, [model, nameList])
+  }, [model, ...nameList])
 
   const obj = useMemo(() => {
     const views = model.$views
@@ -29,7 +29,7 @@ export function Field(props) {
       obj[name] = views[name]
     })
     return obj
-  }, [model, nameList])
+  }, [model, ...nameList])
 
   const views = model.$views
   const view = views[name]
