@@ -4,6 +4,19 @@ export function Field(props) {
   const { model, name, names = [], render, component: Component, map, children } = props
   const nameList = [name, ...names]
 
+  // dont show if no model
+  if (!model || !model.$views) {
+    return null
+  }
+
+  const views = model.$views
+  const view = views[name]
+
+  // dont show not existing field
+  if (!view) {
+    return null
+  }
+
   const [, update] = useState()
 
   useEffect(() => {
@@ -17,22 +30,21 @@ export function Field(props) {
   }, [model, ...nameList])
 
   const obj = useMemo(() => {
-    const views = model.$views
-    const view = views[name]
-    const onChange = (v) => view.value = v
+    const onChange = v => view.value = v
     const obj = {
+      model,
       view,
       onChange,
-      model,
     }
     nameList.forEach((name) => {
-      obj[name] = views[name]
+      const view = views[name]
+      if (view) {
+        obj[name] = view
+      }
     })
     return obj
-  }, [model, ...nameList])
+  }, [model, views, view, ...nameList])
 
-  const views = model.$views
-  const view = views[name]
   const { value, readonly, disabled, hidden, required, errors } = view
   const info = {
     ...obj,
