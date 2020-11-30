@@ -147,7 +147,11 @@ const create = (define) => {
       return { name, store, context, methods, hooks }
     }
   }
-  if (isFunction(define)) {
+  if (isInheritedOf(define, Model)) {
+    const def = create(define)
+    return def
+  }
+  else if (isFunction(define)) {
     const res = define()
     const def = create(res)
     return def
