@@ -624,3 +624,25 @@ export function createShared(define) {
     return context
   }
 }
+
+export function useLocalModel(Model) {
+  const model = React.useMemo(() => new Model(), [Model])
+  const unmounted = React.useRef(false)
+
+  const forceUpdate = React.useCallback(() => {
+    if (!unmounted.current) {
+      update({})
+    }
+  }, [])
+
+  React.useEffect(() => {
+    return () => unmounted.current = true
+  }, [])
+
+  React.useEffect(() => {
+    model.watch('*', forceUpdate, true)
+    return () => model.unwatch('*', forceUpdate)
+  }, [model])
+
+  return model
+}
